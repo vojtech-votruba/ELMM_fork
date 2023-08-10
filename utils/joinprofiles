@@ -1,0 +1,34 @@
+#!/bin/bash
+declare -a arr=("profu.txt"
+                "profuw.txt"
+                "profvw.txt"
+                "proftke.txt"
+                "profdissip.txt"
+                "profuu.txt"
+                "profvv.txt"
+                "profww.txt"
+                "proftemp.txt"
+                "proftempfl.txt"
+                "proftt.txt"
+                "profmoist.txt"
+                "profmoistfl.txt"
+                "profmm.txt"
+                "profscal.txt"
+                "profscalfl.txt"
+                "profss.txt"
+                "profother.txt")
+
+if [[ -n $1 ]]; then
+  if find im-1-1-*/ -wholename "im-1-1-*/$1" | grep "/" > /dev/null; then
+    mkdir -p $1
+  fi
+fi
+
+for i in "${arr[@]}"
+do
+  if find im-1-1-*/ -wholename "im-1-1-*/$1/$i" | grep "/" > /dev/null; then
+    find im-1-1-*/ -wholename "im-1-1-*/$1/$i" | xargs cat | sort -g > "./$1/$i"
+  fi
+done
+ 
+

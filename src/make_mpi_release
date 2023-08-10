@@ -1,0 +1,3 @@
+#!/bin/bash
+scons -j 8 lto=yes fast=yes openmp=no mpi=yes prec=sp dir=../bin/gcc/mpi-release customSB=yes "$@"
+

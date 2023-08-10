@@ -1,0 +1,458 @@
+import os
+
+try:
+  ncpus = str(os.cpu_count())
+except AttributeError:
+  ncpus = 8
+
+comp = ARGUMENTS.get('comp','')
+prec = ARGUMENTS.get('prec','')
+openmp = ARGUMENTS.get('openmp','')
+fast = ARGUMENTS.get('fast','')
+aggressive = ARGUMENTS.get('aggressive','')
+lto = ARGUMENTS.get('lto','')
+prof = ARGUMENTS.get('prof','')
+diag = ARGUMENTS.get('diag','')
+sanitize = ARGUMENTS.get('sanitize','')
+dir = ARGUMENTS.get('dir','')
+customSB = ARGUMENTS.get('customSB','')
+SB = ARGUMENTS.get('SB','')
+customPB = ARGUMENTS.get('customPB','')
+customPuff = ARGUMENTS.get('customPuff','')
+customConfig = ARGUMENTS.get('customConfig','')
+customInitialConditions = ARGUMENTS.get('customInitialConditions','')
+customBoundaryConditions = ARGUMENTS.get('customBoundaryConditions','')
+customSurfaceTemperature = ARGUMENTS.get('customSurfaceTemperature','')
+customSurfaceTemperatureFlux = ARGUMENTS.get('customSurfaceTemperatureFlux','')
+customTimeStepProcedure = ARGUMENTS.get('customTimeStepProcedure','')
+customOutput = ARGUMENTS.get('customOutput','')
+PB = ARGUMENTS.get('PB','')
+extra = ARGUMENTS.get('extra','')
+cgal = ARGUMENTS.get('cgal','')
+mpi = ARGUMENTS.get('mpi','')
+cray = ARGUMENTS.get('cray','')
+ompp = ARGUMENTS.get('ompp','')
+lapack_blas = ARGUMENTS.get('lapack_blas','')
+missing_pfft_r2r = ARGUMENTS.get('missing_pfft_r2r','')
+
+extra_flag = ' ' + str(extra)
+
+target_dir = str(dir)
+if (len(target_dir)>0) and (target_dir[-1]!='/'):
+  target_dir += '/'
+
+if str(prec)=='dp':
+  prec_dir = 'dp/'
+  prec_flag = ' -DDPREC'
+else:
+  prec_dir = 'sp/'
+  prec_flag = ''
+  
+c_check_flag = ''
+
+def compiler_executables():
+  try:
+    fc = os.environ['FC']
+    if len(fc)>0:
+      env.Replace(F90 = fc, FORTRAN = fc)
+  except KeyError:
+    pass
+
+  try:
+    cc = os.environ['CC']
+    if len(cc)>0:
+      env.Replace(CC = cc)
+  except KeyError:
+    pass
+
+  try:
+    cxx = os.environ['CXX']
+    if len(cxx)>0:
+      env.Replace(CXX = cxx)
+  except KeyError:
+    pass
+
+
+
+if str(comp)=='intel':
+  env = Environment(tools=['default','ifort','intelc'])
+  
+  compiler_executables()
+  
+  if str(openmp)!='no':
+    openmp_flag = ' -qopenmp -recursive'
+  else:
+    openmp_flag = ' -recursive -reentrancy'
+
+  if str(fast)=='yes':
+   fast_flag = ' -O3 -shared-intel'
+   check_flag = ''
+  else:
+   fast_flag = ' -O3'
+   check_flag = ' -g -check all,noarg_temp_created -traceback'
+
+  if str(lto)=='yes':
+    lto_flag = ' -ipo'
+  else:
+    lto_flag = ''
+
+  env.Append(F90FLAGS='-cpp -standard-semantics -heap-arrays 200')
+
+  env.Append(F90PATH = [target_dir,target_dir + '/P/'])
+
+  if str(diag)=='yes':
+    env.Append(F90FLAGS=' -diag-enable sc1 -diag-enable sc-precise')
+    env.Append(LINKFLAGS=' -diag-enable sc1 -diag-enable sc-precise')
+  
+  #workaround of https://software.intel.com/en-us/forums/topic/509671
+  env.Append(F90FLAGS='-Dcollapse=!')
+
+   
+elif str(comp)=='cray':
+  env = Environment(CC='cc', CXX='CC', F90='ftn', FORTRAN='ftn', LINK='ftn')
+  
+  compiler_executables()
+  
+  import SCons.Tool
+  import SCons.Defaults
+
+  static_obj, shared_obj = SCons.Tool.createObjBuilders(env)
+  static_obj.add_action('.cc', SCons.Defaults.CXXAction)
+  static_obj.add_emitter('.cc', SCons.Defaults.StaticObjectEmitter)
+  shared_obj.add_emitter('.cc', SCons.Defaults.SharedObjectEmitter)
+     
+  if str(openmp)!='no':
+    openmp_flag = ' -O omp -e R'
+  else:
+    openmp_flag = ' -O noomp -e R'
+
+  if str(fast)=='yes':
+   fast_flag = ' -O3'
+   check_flag = ''
+  else:
+   fast_flag = ' -O3'
+   check_flag = ' -G2 -m 3 -R bdps'
+   
+  if mpi=='yes':
+    fast_flag += ' -h mpi1'
+
+  if str(lto)=='yes':
+    lto_flag = ' -h wp -h pl=' + target_dir + 'ipa'
+  else:
+    lto_flag = ''
+
+  env.Append(F90FLAGS='-e Z')
+
+  env.Append(F90PATH = [target_dir,target_dir + '/P/'])
+
+  env.Append(FORTRANMODDIRPREFIX = '-J')
+   
+else:
+  env = Environment()
+  
+  compiler_executables()
+ 
+  if str(openmp)!='no':
+    openmp_flag = ' -fopenmp'
+  else:
+    openmp_flag = ' -frecursive'
+
+  if str(fast)=='yes':
+    if str(aggressive)=='no':
+      fast_flag = ' -O3'
+    else:
+      fast_flag = ' -O5 -ffast-math -fno-protect-parens -funroll-loops -march=native -mtune=native'
+    check_flag = '  -fbacktrace -g'
+  else:
+    if str(aggressive)=='no':
+      fast_flag = ' -O3'
+    else:
+      fast_flag = ' -O5 -ffast-math -fno-protect-parens'
+    c_check_flag = '  -fbacktrace -g -Wall -Wno-unused -Wno-maybe-uninitialized -Wno-uninitialized'
+    check_flag = c_check_flag + ' -fbacktrace -Waliasing -Wsurprising -Wno-unused-dummy-argument -Wno-aliasing  -fcheck=all'#  -Werror'
+    if mpi!='yes':
+      check_flag += ' -Wimplicit-interface'
+      
+  if str(sanitize)=='yes':
+    fast_flag += ' -fsanitize=address -fsanitize=undefined -fsanitize=address -fsanitize=unreachable -fsanitize=null -fsanitize=signed-integer-overflow'
+    
+  if str(lto)=='yes':
+    lto_flag = ' -flto='+str(ncpus)
+  else:
+    lto_flag = ''
+  
+  env.Append(F90FLAGS='-cpp')
+
+  env.Append(F90PATH = [target_dir,target_dir + '/P/'])
+  
+  if '-J' not in env['FORTRANMODDIRPREFIX']:
+    env.Replace(FORTRANMODDIRPREFIX = '-J')
+
+if cray=='yes':
+  env.Replace(ENV=os.environ)
+  
+  
+def from_env(s):
+  try:
+    env.Append(ENV = {s : os.environ[s]})
+  except:
+    pass
+
+from_env('PATH')
+from_env('LIBRARY_PATH')
+from_env('LD_LIBRARY_PATH')
+from_env('C_INCLUDE_PATH')
+from_env('CPATH')
+from_env('CPLUS_INCLUDE_PATH')
+from_env('INTEL_LICENSE_FILE')
+
+#HACK for some computers setting only LD_LIBRARY_PATH
+try:
+  env.Append(ENV = {'LIBRARY_PATH' : os.environ['LD_LIBRARY_PATH']})
+except KeyError:
+  pass
+ 
+if comp=='cray':
+  try:
+    env.Append(F90PATH = env['ENV']['CPATH'])
+  except KeyError:
+    pass
+
+
+env.Replace(LINK = env.Dump('F90'))
+
+if prof=="yes":
+  prof_flag=' -pg'
+else:
+  prof_flag=''
+  
+env.Append(F90FLAGS= fast_flag + openmp_flag + prof_flag + lto_flag + extra_flag + prec_flag + check_flag)
+env.Append(FFLAGS= env['F90FLAGS'])
+env.Append(CFLAGS= ' -O3 '+ openmp_flag + prof_flag + lto_flag + extra_flag + prec_flag + c_check_flag)
+env.Append(CXXFLAGS= ' -O3 ' + openmp_flag + prof_flag + extra_flag + prec_flag + c_check_flag)
+  
+env.Append(LINKFLAGS= fast_flag + openmp_flag + prof_flag + lto_flag + extra_flag) # + '-Bdynamic -lpoisfft -lfftw3 -lfftw3f -lfftw3_omp -lfftw3f_omp -Bstatic -lgfortran -lquadmath -lstdc++ -llapack -L/usr/lib/x86_64-linux-uclibc/usr/lib/ -lc -lm -lpthread'  -Wl,--verbose
+try:
+  env.Append(LIBPATH = env['ENV']['LIBRARY_PATH'])
+except KeyError:
+  pass
+    
+missing_pfft = str(missing_pfft_r2r)=='yes'
+if missing_pfft:
+  env.Append(F90FLAGS=' -DMISSING_PFFT_R2R')
+  env.Append(CFLAGS=' -DMISSING_PFFT_R2R')
+
+
+env.Append(FORTRANMODDIR = target_dir)
+
+if str(mpi)=='yes':
+  env.Replace(LINK = 'mpif90')
+  env.Replace(F90 = 'mpif90')
+  env.Replace(FORTRAN = 'mpif90')
+  env.Replace(CC = 'mpicc')
+  env.Replace(CXX = 'mpic++')
+  env.Append(F90FLAGS=' -DMPI -DPAR')
+  env.Append(CFLAGS=' -DMPI -DPAR')
+  env.Append(CXXFLAGS=' -DMPI -DPAR')
+  
+  if (openmp=='no'):
+    env.Append(LIBS = ['pfft','pfftf'])
+  else:
+    env.Append(LIBS = ['pfft_omp','pfftf_omp'])
+    
+  env.Append(LIBS = ['fftw3_mpi','fftw3f_mpi'])
+  
+if cray!='yes':
+  #if necessary pass openblas, mkl_xx or equivalent (and include their dependencies) 
+  # in the `lapack_blas` argument
+  if len(lapack_blas) > 0:
+    env.Append(LIBS = lapack_blas.split(' '))
+  else:
+    env.Append(LIBS = ['blas','lapack'])
+
+if str(openmp)!='no':
+  env.Append(LIBS = ['fftw3_omp','fftw3f_omp'])
+
+env.Append(LIBS = ['fftw3','fftw3f','pthread','stdc++'])
+
+if customSB=='yes':
+  env.Append(F90FLAGS='-DCUSTOMSB')
+  if str(SB)=='':
+     SBfile = ['../custom/emptySB.f90']
+  else:
+    SBfile = [str(SB)]
+else:
+  SBfile=[]
+   
+   
+if customPB=='yes':
+  env.Append(F90FLAGS='-DCUSTOMPB')
+  if str(PB)=='':
+    PBfile = ['../custom/emptyPB.f90']
+  else:
+    PBfile = [str(PB)]
+else:
+  PBfile=[]
+  
+if customPuff=='yes':
+  env.Append(F90FLAGS='-DCUSTOM_PUFF_SOURCES')
+  
+if customConfig=='yes':
+  env.Append(F90FLAGS='-DCUSTOM_CONFIG')
+
+if customBoundaryConditions=='yes':
+  env.Append(F90FLAGS='-DCUSTOM_BOUNDARY_CONDITIONS')
+
+if customInitialConditions=='yes':
+  env.Append(F90FLAGS='-DCUSTOM_INITIAL_CONDITIONS')
+
+if customSurfaceTemperature=='yes':
+  env.Append(F90FLAGS='-DCUSTOM_SURFACE_TEMPERATURE')
+
+if customSurfaceTemperatureFlux=='yes':
+  env.Append(F90FLAGS='-DCUSTOM_SURFACE_TEMPERATURE_FLUX')
+
+if customTimeStepProcedure=='yes':
+  env.Append(F90FLAGS='-DCUSTOM_TIMESTEP_PROCEDURE')
+
+if customTimeStepProcedure=='yes':
+  env.Append(F90FLAGS='-DCUSTOM_OUTPUT')
+
+if cray=='yes':
+  env.Replace(CC='cc', CXX='CC', F90='ftn', FORTRAN='ftn')
+  env.Replace(LINK='ftn')
+
+if ompp=='yes':
+  env.Prepend(LINK='kinst-ompp ')
+
+env.Replace(FORTRANFLAGS=env['F90FLAGS'])
+
+#May be used to compile PoisFFT directly, adjust the correct path.
+Mkdir(target_dir + '/P/')
+objs = env.Object(target = target_dir + 'P/customfftw3',       source = '../../PoisFFT/src/customfftw3.f90')
+if str(mpi)=='yes':
+  objs += env.Object(target = target_dir + 'P/custompfft',     source = '../../PoisFFT/src/custompfft.f90')
+objs += env.Object(target = target_dir + 'P/precisions',       source = '../../PoisFFT/src/precisions.f90')
+objs += env.Object(target = target_dir + 'P/parameters',       source = '../../PoisFFT/src/parameters.f90')
+objs += env.Object(target = target_dir + 'P/fft',              source = '../../PoisFFT/src/fft.f90', 
+                   F90FLAGS = list(filter(lambda flag: flag !='-ipo' , env['F90FLAGS'])))
+Depends(objs[-1], '../../PoisFFT/src/fft-inc.f90')
+Depends(objs[-1], '../../PoisFFT/src/plan_new-inc.f90')
+Depends(objs[-1], '../../PoisFFT/src/allocate_fftw-inc.f90')
+Depends(objs[-1], objs[0])
+Depends(objs[-1], objs[2])
+Depends(objs[-1], objs[3])
+if missing_pfft:
+  objs += env.Object(target = target_dir + 'P/missing_pfft',   source = '../../PoisFFT/src/missing_pfft.c')
+objs += env.Object(target = target_dir + 'P/poisfft',          source = '../../PoisFFT/src/poisfft.f90')
+Depends(objs[-1], '../../PoisFFT/src/poisfft-inc.f90')
+Depends(objs[-1], '../../PoisFFT/src/poisfft-solvers-inc.f90')
+Depends(objs[-1], '../../PoisFFT/src/loop_nest_3d.f90')
+Depends(objs[-1], objs[3])
+objs += env.Object(target = target_dir + 'P/main',             source = '../../PoisFFT/src/main.f90')
+
+if str(mpi)=='yes':
+  objs += env.Object(target = target_dir + 'custom_mpi',       source = 'custom_mpi.f90')
+  objs += env.Object(target = target_dir + 'exchange_mpi',     source = 'exchange_mpi.f90')
+  objs += env.Object(target = target_dir + 'exchange_mpi_derived_types', source = 'exchange_mpi_derived_types.f90')
+  objs += env.Object(target = target_dir + 'domains_bc_types_mpi', source = 'domains_bc_types_mpi.f90')
+  objs += env.Object(target = target_dir + 'domains_bc_init_mpi', source = 'domains_bc_init_mpi.f90')
+  objs += env.Object(target = target_dir + 'domains_bc_mpi', source = 'domains_bc_mpi.f90')
+else:
+  objs += env.Object(target = target_dir + 'dummy_par',        source = 'dummy_par.f90') 
+
+objs += env.Object(target = target_dir + 'parameters',         source = 'parameters.f90')
+objs += env.Object(target = target_dir + 'rng_par_zig',        source = 'rng_par_zig.f90')
+objs += env.Object(target = target_dir + 'rng_par_zig_c',      source = 'rng_par_zig_c.c')
+objs += env.Object(target = target_dir + 'stop',               source = 'stop.f90')
+objs += env.Object(target = target_dir + 'lapack',             source = 'lapack.f')
+objs += env.Object(target = target_dir + 'interpolation',      source = 'interpolation.f90')
+objs += env.Object(target = target_dir + 'strings',            source = 'strings.f90')
+objs += env.Object(target = target_dir + 'lists',              source = 'lists.f90')
+objs += env.Object(target = target_dir + 'alternate_ieee_isnan', source = 'alternate_ieee_isnan.f90',
+                   F90FLAGS = list(filter(lambda flag: not ( flag.startswith('-O') or
+                                                       flag.startswith('-flto') or
+                                                       flag.startswith('-ffast-math') )
+                                     , env['F90FLAGS'])))
+objs += env.Object(target = target_dir + 'endianness',         source = 'endianness.f90')
+objs += env.Object(target = target_dir + 'freeunit',           source = 'freeunit.f90')
+objs += env.Object(target = target_dir + 'arrayutilities',     source = 'arrayutilities.f90')
+objs += env.Object(target = target_dir + 'tiling',             source = 'tiling.f90')
+objs += env.Object(target = target_dir + 'simplevtk',          source = 'simplevtk.f90')
+objs += env.Object(target = target_dir + 'limiters',           source = 'limiters.f90')
+objs += env.Object(target = target_dir + 'multigrid',          source = 'multigrid.f90')
+objs += env.Object(target = target_dir + 'multigrid2d',        source = 'multigrid2d.f90')
+objs += env.Object(target = target_dir + 'large_scale_processes',     source = 'large_scale_processes.f90')
+objs += env.Object(target = target_dir + 'radiation',     source = 'radiation.f90')
+objs += env.Object(target = target_dir + 'diabatic_processes',     source = 'diabatic_processes.f90')
+objs += env.Object(target = target_dir + 'solarradiation',     source = 'solarradiation.f90')
+objs += env.Object(target = target_dir + 'wallmodels',         source = 'wallmodels.f90', F90FLAGS = list(filter(lambda flag: flag !='-flto' , env['F90FLAGS'])))
+objs += env.Object(target = target_dir + 'volumesources',      source = 'volumesources.f90')
+objs += env.Object(target = target_dir + 'areasources',        source = 'areasources.f90')
+objs += env.Object(target = target_dir + 'linesources',        source = 'linesources.f90')
+objs += env.Object(target = target_dir + 'pointsources',       source = 'pointsources.f90')
+objs += env.Object(target = target_dir + 'puffs',              source = 'puffs.f90')
+
+if cgal=='yes':
+  #Support for CGAL for geometry files reading.
+  objs += env.Object(target = target_dir + 'cgal_polyhedra_cc',source = 'cgal_polyhedra.cc', CXXFLAGS = env['CXXFLAGS'] + '-O3 -std=c++11 -frounding-math')
+  objs += env.Object(target = target_dir + 'cgal_polyhedra',   source = 'cgal_polyhedra.f90')
+  Depends(objs[-1], 'cgal_polyhedra.cc')
+  env.Append(LIBS = ['CGAL','boost_thread','boost_system'])
+else:
+  #Disable support for CGAL. Useful for enabling valgrind.
+  objs += env.Object(target = target_dir + 'dummy_cgal_polyhedra',  source = 'dummy_cgal_polyhedra.f90')
+  
+
+
+
+
+objs += env.Object(target = target_dir + 'elevationmodels',    source = 'elevationmodels.f90')
+objs += env.Object(target = target_dir + 'geometricshapes',    source = 'geometricshapes.f90')
+objs += env.Object(target = target_dir + 'geometricshapes2d',  source = 'geometricshapes2d.f90')
+objs += env.Object(target = target_dir + 'solidbodies',        source = 'solidbodies.f90')
+objs += env.Object(target = target_dir + 'immersedboundary',   source = 'immersedboundary.f90')
+objs += env.Object(target = target_dir + 'turbinlet',          source = 'turbinlet.f90')
+objs += env.Object(target = target_dir + 'boundaries',         source = 'boundaries.f90')
+objs += env.Object(target = target_dir + 'scalarboundaries',   source = 'scalarboundaries.f90')
+objs += env.Object(target = target_dir + 'scalar_advection',   source = 'scalar_advection.f90')
+objs += env.Object(target = target_dir + 'scalar_diffusion',   source = 'scalar_diffusion.f90')
+objs += env.Object(target = target_dir + 'scalars',            source = 'scalars.f90')
+objs += env.Object(target = target_dir + 'filters',            source = 'filters.f90')
+objs += env.Object(target = target_dir + 'subgrid_mixedtimescale', source = 'subgrid_mixedtimescale.f90')
+objs += env.Object(target = target_dir + 'subgrid',            source = 'subgrid.f90')
+objs += env.Object(target = target_dir + 'pthreadsc',          source = 'pthreads.c')
+objs += env.Object(target = target_dir + 'pthreadsf',          source = 'pthreads.f90')
+objs += env.Object(target = target_dir + 'frames_common',      source = 'frames_common.f90')
+objs += env.Object(target = target_dir + 'frames',             source = 'frames.f90')
+objs += env.Object(target = target_dir + 'output_helpers',     source = 'output_helpers.f90')
+objs += env.Object(target = target_dir + 'vtkframes',          source = 'vtkframes.f90')
+if str(mpi)=='yes':
+  objs += env.Object(target = target_dir + 'frames_parallelIO',  source = 'frames_parallelIO.f90')
+objs += env.Object(target = target_dir + 'surfacemapframes',   source = 'surfacemapframes.f90')
+objs += env.Object(target = target_dir + 'vertical_profiles',  source = 'vertical_profiles.f90')
+objs += env.Object(target = target_dir + 'outputs',            source = 'outputs.f90')
+objs += env.Object(target = target_dir + 'poisson',            source = 'poisson.f90')
+objs += env.Object(target = target_dir + 'pressure',           source = 'pressure.f90')
+objs += env.Object(target = target_dir + 'initial',            source = 'initial.f90')
+objs += env.Object(target = target_dir + 'advection',          source = 'advection.f90')
+objs += env.Object(target = target_dir + 'linearforcing',      source = 'linearforcing.f90')
+objs += env.Object(target = target_dir + 'sponge',             source = 'sponge.f90')
+objs += env.Object(target = target_dir + 'water_thermodynamics',           source = 'water_thermodynamics.f90')
+objs += env.Object(target = target_dir + 'buoyant_gases',      source = 'buoyant_gases.f90')
+objs += env.Object(target = target_dir + 'dynamics',           source = 'dynamics.f90')
+objs += env.Object(target = target_dir + 'advection_variable_zz',     source = 'advection_variable_z.f90')
+objs += env.Object(target = target_dir + 'momentum_diffusion', source = 'momentum_diffusion.f90',F90FLAGS=env['F90FLAGS'] + ['-ffree-line-length-0'])
+Depends(objs[-1], 'wmfluxes-inc.f90')
+Depends(objs[-1], 'wmfluxes-nobranch-U-inc.f90')
+Depends(objs[-1], 'wmfluxes-nobranch-V-inc.f90')
+Depends(objs[-1], 'wmfluxes-nobranch-W-inc.f90')
+Depends(objs[-1], 'wmfluxes-nobranch-inc-4ord.f90')
+objs += env.Object(target = target_dir + 'tsteps',             source = 'tsteps.f90')
+objs += env.Object(target = target_dir + 'main',               source = 'main.f90')
+
+objs = list(filter(lambda o: str(o)[-4:] != '.mod', objs))
+
+t = env.Program(target = target_dir + 'ELMM', source= objs + SBfile + PBfile)
+
+Default(t)

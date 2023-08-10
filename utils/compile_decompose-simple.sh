@@ -1,0 +1,1 @@
+gfortran -g -fbacktrace -Wall -fcheck=all ../bin/gcc/debug/stop.o ../bin/gcc/debug/parameters.o  ../bin/gcc/debug/lists.o ../bin/gcc/debug/strings.o -I../bin/gcc/debug/ decomposevtk-simple.f90 -o decomposevtk-simple
