@@ -13,7 +13,7 @@ module Subgrid
   integer :: sgstype
 
   integer, parameter, public :: SmagorinskyModel = 1, SigmaModel = 2, VremanModel = 3, &
-                                StabSubgridModel = 4, MixedTimeScaleModel = 5
+                                StabSubgridModel = 4, MixedTimeScaleModel = 5, WALE = 6
 
   contains
 
@@ -151,10 +151,6 @@ module Subgrid
     endfunction Rig
 
 
-
-
-
-
     pure real(knd) function Strainu(S)      !Magnitude of the strain rate tensor.
       real(knd), intent(in) :: S(1:3,1:3)
       integer ::ii,jj
@@ -170,7 +166,7 @@ module Subgrid
 
 
 
-     subroutine StrainIJ(i, j, k, U, V, W, S)     !Computes components of the strain rate tensor.
+    subroutine StrainIJ(i, j, k, U, V, W, S)     !Computes components of the strain rate tensor.
       real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in) :: U, V, W
       real(knd), intent(out) :: S(1:3,1:3)
       integer, intent(in) :: i, j, k
@@ -822,7 +818,87 @@ module Subgrid
 
     end subroutine SGS_Sigma_stability
     
-    
+    subroutine SGS_WALE(U,V,W, filter_ratio) 
+      !WALE subgrid model - Flow, Turbul. Combust, Nicoud F., Ducros F. (1999) 
+      real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in) :: U, V, W
+      real(knd), intent(in) :: filter_ratio
+      integer :: i, j, k
+      integer :: ii, jj, kk, ll
+      real (knd) :: width
+      real(knd), parameter :: CW = 0.58_knd
+      real(knd) :: S(1:3,1:3)
+      real(knd) :: Omega(1:3,1:3)
+      real (knd) :: S_sqr, Omega_sqr, IVs
+      real (knd) :: SdSd, OP1, OP2
+
+
+      width = filter_ratio * (dxmin*dymin*dzmin)**(1._knd/3._knd)      
+
+      do k = 1, Prnz
+        do j = 1, Prny
+          do i = 1, Prnx
+            call StrainIJ(i, j, k, U, V, W, S)
+            call OmegaIJ(Omega, i, j, k)
+            S_sqr = 0
+            Omega_sqr = 0
+            IVs = 0
+
+            do ii = 1, 3
+              do jj = 1, 3
+                S_sqr = S_sqr + S(ii, jj)*S(ii, jj)
+                Omega_sqr = Omega_sqr + Omega(ii, jj) * Omega(ii, jj)
+              end do
+            end do
+
+            do ii = 1, 3
+              do jj = 1, 3
+                do kk = 1, 3
+                  do ll = 1, 3
+                    IVs = IVs + S(ii, kk) * S(kk, jj) * Omega(jj, ll) * Omega(ll, ii) 
+                  end do
+                end do
+              end do
+            end do
+
+            SdSd = (1._knd/6._knd)*(S_sqr*S_sqr + Omega_sqr*Omega_sqr) + (2._knd/3._knd)*(S_sqr * Omega_sqr) + 2._knd*IVs 
+
+            OP1 = (SdSd)**(3._knd/2._knd)
+            OP2 = (S_sqr)**(5._knd/2._knd) + (SdSd)**(5._knd/4._knd)  
+            Viscosity(i,j,k) = (CW * width)**(2._knd) * OP1/OP2
+
+            Viscosity(i,j,k) = Viscosity(i,j,k) + molecular_viscosity
+          end do
+        end do
+      end do
+
+      contains
+        pure subroutine OmegaIJ(Omega, i, j, k)
+          real(knd), intent(out) :: Omega(1:3,1:3)
+          integer, intent(in) :: i, j, k
+          real(knd) :: D(1:3,1:3)
+          integer :: ii, jj
+
+          D = 0
+
+          D(1,1) = (U(i,j,k)-U(i-1,j,k)) / dxmin
+          D(2,2) = (V(i,j,k)-V(i,j-1,k)) / dymin
+          D(3,3) = (W(i,j,k)-W(i,j,k-1)) / dzPr(k)
+          D(1,2) = (U(i,j+1,k)+U(i-1,j+1,k)-U(i,j-1,k)-U(i-1,j-1,k)) / (4 * dymin)
+          D(1,3) = (U(i,j,k+1)+U(i-1,j,k+1)-U(i,j,k-1)-U(i-1,j,k-1)) / (2 * (zPr(k+1)-zPr(k-1)))
+          D(2,1) = (V(i+1,j,k)+V(i+1,j-1,k)-V(i-1,j,k)-V(i-1,j-1,k)) / (4 * dxmin)
+          D(2,3) = (V(i,j,k+1)+V(i,j-1,k+1)-V(i,j,k-1)-V(i,j-1,k-1)) / (2 * (zPr(k+1)-zPr(k-1)))
+          D(3,1) = (W(i+1,j,k)+W(i+1,j,k-1)-W(i-1,j,k)-W(i-1,j,k-1)) / (4 * dxmin)
+          D(3,2) = (W(i,j+1,k)+W(i,j+1,k-1)-W(i,j-1,k)-W(i,j-1,k-1)) / (4 * dymin)
+
+          do jj = 1, 3
+            do ii = 1, 3
+              Omega(ii,jj) = (D(ii,jj) - D(jj,ii)) / 2
+            end do
+          end do
+
+        end subroutine OmegaIJ
+        
+    endsubroutine SGS_WALE
     
     subroutine SubgridModel(U, V, W)
       !dispatch of subgrid models
@@ -839,6 +915,8 @@ module Subgrid
                         call SGS_Sigma_stability(U, V, W, filter_ratios(filtertype))
       else if (sgstype==MixedTimeScaleModel) then
                         call SGS_MixedTimeScale(U, V, W)
+      else if (sgstype==WALE) then
+                        call SGS_WALE(U,V,W, filter_ratios(filtertype))
       else
 
         Viscosity = molecular_viscosity
