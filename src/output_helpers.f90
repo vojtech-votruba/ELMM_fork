@@ -76,7 +76,7 @@ contains
   pure real(knd) function ScalarVerticalFlux(i,j,k,Scal,W)
     !not accurate!  
     integer, intent(in)   :: i,j,k
-    real(knd), contiguous, intent(in) :: Scal(-1:,-1:,-1:), W(-2:,-2:,-2:)
+    real(knd), contiguous, intent(in) :: Scal(-2:,-2:,-2:), W(-2:,-2:,-2:)
 
     ScalarVerticalFlux = Scal(i,j,k) * (W(i,j,k)+W(i,j,k-1))/2 + &
                        TDiff(i,j,k) * (Scal(i,j,k+1)-Scal(i,j,k-1)) / (zW(k+1)-zW(k-1))

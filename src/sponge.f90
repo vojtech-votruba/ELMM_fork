@@ -223,7 +223,7 @@ contains
   
   
   subroutine SpongeTopScalar(Phi)
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: Phi
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: Phi
     integer :: i, j, k, bufn
     real(knd) :: ze, zs, zb, p
 
@@ -292,7 +292,7 @@ contains
   
   subroutine SpongeOut(U, V, W, temperature)
     real(knd), contiguous, intent(inout), dimension(-2:,-2:,-2:) :: U, V, W
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: temperature
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: temperature
     
     !NOTE: currently having both of them enabled will likely lead to strange results
     if (enable_in_sponge_x) call SpongeIn_X(U, V, W, temperature)
@@ -302,7 +302,7 @@ contains
 
   subroutine SpongeIn_X(U, V, W, temperature)
     real(knd), contiguous, intent(inout), dimension(-2:,-2:,-2:) :: U, V, W
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: temperature
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: temperature
     integer   :: i, j, k, bufn
     integer   :: hi, lo, loU, hiU
     real(knd) :: p, xe, xs, xb, DF
@@ -397,7 +397,7 @@ contains
 
   subroutine SpongeOut_X(U, V, W, temperature)
     real(knd), contiguous, intent(inout), dimension(-2:,-2:,-2:) :: U, V, W
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: temperature
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: temperature
     integer   :: i, j, k, bufn
     integer   :: hi, lo, loU, hiU
     real(knd) :: p, xe, xs, xb, DF
@@ -493,7 +493,7 @@ contains
   subroutine SpongeOut_Y(U, V, W, temperature)
     use custom_par
     real(knd), contiguous, intent(inout), dimension(-2:,-2:,-2:) :: U, V, W
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: temperature
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: temperature
     integer   :: i, j, k, bufn
     integer   :: hi, lo, loV, hiV
     real(knd) :: p, ye, ys, yb, DF

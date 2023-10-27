@@ -13,7 +13,7 @@ module WaterThermodynamics
 contains
 
   subroutine compute_liquid_water_content(Temperature, Moisture, Pr)
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(in) :: Temperature, Moisture
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in) :: Temperature, Moisture
     real(knd), contiguous, intent(in) :: Pr(-1:,-1:,-1:)
     real(knd) :: p
     integer :: i, j, k

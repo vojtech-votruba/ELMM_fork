@@ -28,7 +28,7 @@ module Puffs
 contains
 
   subroutine PreparePuffs(Scalar, RK_stage, RK_stages, time, dt)
-    real(knd), dimension(-1:,-1:,-1:,1:), contiguous, intent(inout) :: Scalar
+    real(knd), dimension(-2:,-2:,-2:,1:), contiguous, intent(inout) :: Scalar
     integer, intent(in) :: RK_stage, RK_stages
     real(knd), intent(in) :: time, dt
     integer :: i
@@ -84,7 +84,7 @@ contains
   end subroutine
 
   subroutine DoPuffs(Scalar_derivative, sc)
-    real(knd),dimension(-1:,-1:,-1:),contiguous,intent(inout) :: Scalar_derivative
+    real(knd),dimension(-2:,-2:,-2:),contiguous,intent(inout) :: Scalar_derivative
     integer, intent(in) :: sc
     integer :: i
       
@@ -98,7 +98,7 @@ contains
   
   subroutine DoPuff(p, Scalar_derivative, sc)
     type(PuffSource),intent(inout) :: p
-    real(knd),dimension(-1:,-1:,-1:),contiguous,intent(inout) :: Scalar_derivative
+    real(knd),dimension(-2:,-2:,-2:),contiguous,intent(inout) :: Scalar_derivative
     integer, intent(in) :: sc
     integer :: i,j
   

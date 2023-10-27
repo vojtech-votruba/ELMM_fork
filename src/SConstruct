@@ -26,6 +26,7 @@ customSurfaceTemperature = ARGUMENTS.get('customSurfaceTemperature','')
 customSurfaceTemperatureFlux = ARGUMENTS.get('customSurfaceTemperatureFlux','')
 customTimeStepProcedure = ARGUMENTS.get('customTimeStepProcedure','')
 customOutput = ARGUMENTS.get('customOutput','')
+customForcing = ARGUMENTS.get('customForcing','')
 PB = ARGUMENTS.get('PB','')
 extra = ARGUMENTS.get('extra','')
 cgal = ARGUMENTS.get('cgal','')
@@ -315,8 +316,11 @@ if customSurfaceTemperatureFlux=='yes':
 if customTimeStepProcedure=='yes':
   env.Append(F90FLAGS='-DCUSTOM_TIMESTEP_PROCEDURE')
 
-if customTimeStepProcedure=='yes':
+if customOutput=='yes':
   env.Append(F90FLAGS='-DCUSTOM_OUTPUT')
+
+if customForcing=='yes':
+  env.Append(F90FLAGS='-DCUSTOM_FORCING')
 
 if cray=='yes':
   env.Replace(CC='cc', CXX='CC', F90='ftn', FORTRAN='ftn')

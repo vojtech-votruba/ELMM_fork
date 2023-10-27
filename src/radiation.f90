@@ -13,7 +13,7 @@ contains
 
   subroutine apply_radiation_heat_profile(Temperature)
     !a simple profile of radiation heating (flux convergence)
-    real(knd), contiguous, intent(inout) :: Temperature(-1:,-1:,-1:)
+    real(knd), contiguous, intent(inout) :: Temperature(-2:,-2:,-2:)
     integer :: i ,j, k
 
     !$omp parallel do collapse(3)

@@ -951,7 +951,7 @@ implicit none
     nz = Prnz
 
 #ifdef PAR
-    call par_exchange_boundaries(Phi, Btype, 4)
+    call par_exchange_boundaries(Phi, Btype, 6)
 #endif
     
     if (Btype(We)==BC_PERIODIC) then

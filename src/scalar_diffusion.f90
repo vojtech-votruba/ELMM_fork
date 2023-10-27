@@ -13,6 +13,7 @@ module ScalarDiffusion
   private
   
   public ScalarDiffusion_explicit, ScalarDiffusion_nobranch, ScalarDiffusion_implicit, &
+         ScalarDiffusion_nobranch_4ord, ScalarDiffusion_4ord_5point, &
          AddScalarDiffVector, ComputeTDiff, &
          ScalarDiffusion_Deallocate, &
          boundary_interface, &
@@ -22,11 +23,12 @@ module ScalarDiffusion
 
   real(knd), allocatable :: Scal3(:,:,:)
   real(knd), allocatable :: Ap(:,:,:)
+  real(knd), allocatable :: Fl(:,:,:)
 
   abstract interface
     subroutine boundary_interface(array)
       use Parameters
-      real(knd), intent(inout) :: array(-1:,-1:,-1:)
+      real(knd), intent(inout) :: array(-2:,-2:,-2:)
     end subroutine
   end interface
 
@@ -39,8 +41,8 @@ contains
 #ifdef PAR
     use custom_par, only: par_co_max
 #endif
-    real(knd), contiguous, intent(in)    :: Scal(-1:,-1:,-1:)
-    real(knd), contiguous, intent(inout) :: Scal2(-1:,-1:,-1:)
+    real(knd), contiguous, intent(in)    :: Scal(-2:,-2:,-2:)
+    real(knd), contiguous, intent(inout) :: Scal2(-2:,-2:,-2:)
     real(knd), intent(in) :: coef
     integer, intent(in) :: sctype
     procedure(boundary_interface) :: boundary_procedure
@@ -63,8 +65,8 @@ contains
     
 
     if (.not.allocated(Scal3)) then
-      allocate(Scal3(-1:Prnx+2,-1:Prny+2,-1:Prnz+2))
-      allocate(Ap(-1:Prnx+2,-1:Prny+2,-1:Prnz+2))
+      allocate(Scal3, mold=Scal)
+      allocate(Ap, mold=Scal)
     end if
 
     nx = Prnx
@@ -344,8 +346,8 @@ contains
 
 
   subroutine ScalarDiffusion_explicit(Scal2, Scal)
-    real(knd), contiguous, intent(inout) :: Scal2(-1:,-1:,-1:)
-    real(knd), contiguous, intent(in)    :: Scal(-1:,-1:,-1:)
+    real(knd), contiguous, intent(inout) :: Scal2(-2:,-2:,-2:)
+    real(knd), contiguous, intent(in)    :: Scal(-2:,-2:,-2:)
     integer :: i, j, k, bi, bj, bk
     real(knd) :: Ax, Ay, Az
     integer :: tnx, tny, tnz
@@ -400,8 +402,8 @@ contains
 
 
   subroutine ScalarDiffusion_nobranch(Scal2, Scal)
-    real(knd), contiguous, intent(inout) :: Scal2(-1:,-1:,-1:)
-    real(knd), contiguous, intent(in)    :: Scal(-1:,-1:,-1:)
+    real(knd), contiguous, intent(inout) :: Scal2(-2:,-2:,-2:)
+    real(knd), contiguous, intent(in)    :: Scal(-2:,-2:,-2:)
     integer :: i, j, k, bi, bj, bk
     integer :: xi, yj, zk
     real(knd) :: Ax, Ay, Az
@@ -511,11 +513,390 @@ contains
 
 
 
+  subroutine ScalarDiffusion_nobranch_4ord(Scal2, Scal)
+    real(knd), contiguous, intent(inout) :: Scal2(-2:,-2:,-2:)
+    real(knd), contiguous, intent(in)    :: Scal(-2:,-2:,-2:)
+    integer :: i, j, k, bi, bj, bk
+    integer :: xi, yj, zk
+    real(knd) :: Ax, Ay, Az
+    integer :: tnx, tny, tnz
+    
+    real(knd), parameter :: C1 = 9._knd / 8, C3 = 1._knd / (8*3)
+    real(knd), parameter :: D0 = 13._knd / 12, D1 = -1._knd / 24
+
+    integer, parameter :: narr = 3
+       
+    
+    ! To avoid issues near the boundaries (wall-modelled and internal points), the turbulent viscosity is not interpolated in fourth order 
+    ! on a 4-point stencil, but only in second order on a 2-point stencil. The difference is expected to be insignificant due to
+    ! uncertainties in the value of TDiff itself.
+    
+    !deconvolution of flux
+    ! [Fl]i = -1/24*Fl(i+1) + 13*Fl(i)/12 -1/24*Fl(i-1)
+    ! ([Fl]i+1 - [Fl]i) / dx = 9/8*(Fl(i+1)-Fl(i)) / dx - 1/8*(Fl(i+2)-Fl(i-1))/(3*dx)
+    
+    tnx = tilenx(narr)
+    tny = tileny(narr)
+    tnz = tilenz(narr)
+
+    Ax = 1 / (2*dxmin**2)
+    Ay = 1 / (2*dymin**2)
+    Az = 1 / (2*dzmin**2)
+
+    if (.not.allocated(Fl)) &
+      allocate(Fl(-1:Prnx+1, &
+                  -1:Prny+1, &
+                  -1:Prnz+1))
+                  
+    !$omp parallel private(i, j, k, bi, bj, bk, xi, yj, zk)
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 1, Prnz, tnz
+     do bj = 1, Prny, tny
+      do bi = -1, Prnx+1, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx+1)
+           Fl(i,j,k) = (TDiff(i+1,j,k)+TDiff(i,j,k)) * (C1*(Scal(i+1,j,k)-Scal(i,j,k)) - C3*(Scal(i+2,j,k)-Scal(i-1,j,k))) * Ax
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 1, Prnz, tnz
+     do bj = 1, Prny, tny
+      do bi = 1, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx)
+             Scal2(i,j,k) = Scal2(i,j,k) + C1*(Fl(i,j,k)-Fl(i-1,j,k)) - C3*(Fl(i+1,j,k)-Fl(i-2,j,k))
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+
+    !$omp do
+    do i = 1, size(Scflx_points)
+      xi = Scflx_points(i)%xi
+      yj = Scflx_points(i)%yj
+      zk = Scflx_points(i)%zk
+      Scal2(xi,yj,zk) = Scal2(xi,yj,zk) - &
+                        (D1*Fl(i-1,j,k) + D0*Fl(i,j,k) + D1*Fl(i+1,j,k))
+    end do
+    !$omp end do
+    !$omp do
+    do i = 1, size(Scflx_points)
+      xi = Scflx_points(i)%xi
+      yj = Scflx_points(i)%yj
+      zk = Scflx_points(i)%zk
+      Scal2(xi+1,yj,zk) = Scal2(xi+1,yj,zk) + &
+                          (D1*Fl(i-1,j,k) + D0*Fl(i,j,k) + D1*Fl(i+1,j,k))
+    end do
+    !$omp end do nowait
+
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 1, Prnz, tnz
+     do bj = -1, Prny+1, tny
+      do bi = 1, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny+1)
+         do i = bi, min(bi+tnx-1, Prnx)
+           Fl(i,j,k) = (TDiff(i,j+1,k)+TDiff(i,j,k)) * (C1*(Scal(i,j+1,k)-Scal(i,j,k)) - C3*(Scal(i,j+2,k)-Scal(i,j-1,k))) * Ay
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 1, Prnz, tnz
+     do bj = 1, Prny, tny
+      do bi = 1, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx)
+             Scal2(i,j,k) = Scal2(i,j,k) + C1*(Fl(i,j,k)-Fl(i,j-1,k)) - C3*(Fl(i,j+1,k)-Fl(i,j-2,k))
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+
+    !$omp do
+    do i = 1, size(Scfly_points)
+      xi = Scfly_points(i)%xi
+      yj = Scfly_points(i)%yj
+      zk = Scfly_points(i)%zk
+      Scal2(xi,yj,zk) = Scal2(xi,yj,zk) - &
+                        (D1*Fl(i,j-1,k) + D0*Fl(i,j,k) + D1*Fl(i,j+1,k))
+                        
+    end do
+    !$omp end do
+    !$omp do
+    do i = 1, size(Scfly_points)
+      xi = Scfly_points(i)%xi
+      yj = Scfly_points(i)%yj
+      zk = Scfly_points(i)%zk
+      Scal2(xi,yj+1,zk) = Scal2(xi,yj+1,zk) + &
+                          (D1*Fl(i,j-1,k) + D0*Fl(i,j,k) + D1*Fl(i,j+1,k))
+    end do
+    !$omp end do nowait
+
+    !$omp do schedule(runtime) collapse(3)
+    do bk = -1, Prnz+1, tnz
+     do bj = 1, Prny, tny
+      do bi = 1, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz+1)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx)
+           Fl(i,j,k) = (TDiff(i,j,k+1)+TDiff(i,j,k)) * (C1*(Scal(i,j,k+1)-Scal(i,j,k)) - C3*(Scal(i,j,k+2)-Scal(i,j,k-1))) * Az
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 1, Prnz, tnz
+     do bj = 1, Prny, tny
+      do bi = 1, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx)
+             Scal2(i,j,k) = Scal2(i,j,k) + C1*(Fl(i,j,k)-Fl(i,j,k-1)) - C3*(Fl(i,j,k+1)-Fl(i,j,k-2))
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+
+    !$omp do
+    do i = 1, size(Scflz_points)
+      xi = Scflz_points(i)%xi
+      yj = Scflz_points(i)%yj
+      zk = Scflz_points(i)%zk
+      Scal2(xi,yj,zk) = Scal2(xi,yj,zk) - &
+                        (D1*Fl(i,j,k-1) + D0*Fl(i,j,k) + D1*Fl(i,j,k+1))
+    end do
+    !$omp end do
+    !$omp do
+    do i = 1, size(Scflz_points)
+      xi = Scflz_points(i)%xi
+      yj = Scflz_points(i)%yj
+      zk = Scflz_points(i)%zk
+      Scal2(xi,yj,zk+1) = Scal2(xi,yj,zk+1) + &
+                          (D1*Fl(i,j,k-1) + D0*Fl(i,j,k) + D1*Fl(i,j,k+1))
+    end do
+    !$omp end do
+    !$omp end parallel
+  end subroutine ScalarDiffusion_nobranch_4ord
+
+
+
+
+
+  subroutine ScalarDiffusion_4ord_5point(Scal2, Scal)
+    real(knd), contiguous, intent(inout) :: Scal2(-2:,-2:,-2:)
+    real(knd), contiguous, intent(in)    :: Scal(-2:,-2:,-2:)
+    integer :: i, j, k, bi, bj, bk
+    integer :: xi, yj, zk
+    real(knd) :: Ax, Ay, Az
+    integer :: tnx, tny, tnz
+    
+    real(knd), parameter :: C1 = 15._knd / 12, C3 = 1._knd / 12
+
+    integer, parameter :: narr = 3
+
+    
+    !five point 1D finite-difference Laplacian in the conservative flux-divergence form
+    ! F(i+1/2) = (15 (C(i+1)-C(i)) - 1 (C(i+2) - C(i-1))) / (12 dx)
+    ! dC = (F(i+1/2) - F(i-1/2)) / dx
+    
+    if (.not.allocated(Fl)) &
+      allocate(Fl(0:Prnx, &
+                  0:Prny, &
+                  0:Prnz))
+                  
+    tnx = tilenx(narr)
+    tny = tileny(narr)
+    tnz = tilenz(narr)
+
+    Ax = 1 / (2*dxmin**2)
+    Ay = 1 / (2*dymin**2)
+    Az = 1 / (2*dzmin**2)
+
+    !$omp parallel private(i, j, k, bi, bj, bk, xi, yj, zk)
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 1, Prnz, tnz
+     do bj = 1, Prny, tny
+      do bi = 0, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx)
+           Fl(i,j,k) = (TDiff(i+1,j,k)+TDiff(i,j,k)) * (C1*(Scal(i+1,j,k)-Scal(i,j,k)) - C3*(Scal(i+2,j,k)-Scal(i-1,j,k))) * Ax
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 1, Prnz, tnz
+     do bj = 1, Prny, tny
+      do bi = 1, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx)
+             Scal2(i,j,k) = Scal2(i,j,k) + (Fl(i,j,k)-Fl(i-1,j,k))
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+
+    !$omp do
+    do i = 1, size(Scflx_points)
+      xi = Scflx_points(i)%xi
+      yj = Scflx_points(i)%yj
+      zk = Scflx_points(i)%zk
+      Scal2(xi,yj,zk) = Scal2(xi,yj,zk) - Fl(i,j,k)
+    end do
+    !$omp end do
+    !$omp do
+    do i = 1, size(Scflx_points)
+      xi = Scflx_points(i)%xi
+      yj = Scflx_points(i)%yj
+      zk = Scflx_points(i)%zk
+      Scal2(xi+1,yj,zk) = Scal2(xi+1,yj,zk) + Fl(i,j,k)
+    end do
+    !$omp end do nowait
+
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 1, Prnz, tnz
+     do bj = 0, Prny, tny
+      do bi = 1, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx)
+           Fl(i,j,k) = (TDiff(i,j+1,k)+TDiff(i,j,k)) * (C1*(Scal(i,j+1,k)-Scal(i,j,k)) - C3*(Scal(i,j+2,k)-Scal(i,j-1,k))) * Ay
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 1, Prnz, tnz
+     do bj = 1, Prny, tny
+      do bi = 1, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx)
+             Scal2(i,j,k) = Scal2(i,j,k) + (Fl(i,j,k)-Fl(i,j-1,k))
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+
+    !$omp do
+    do i = 1, size(Scfly_points)
+      xi = Scfly_points(i)%xi
+      yj = Scfly_points(i)%yj
+      zk = Scfly_points(i)%zk
+      Scal2(xi,yj,zk) = Scal2(xi,yj,zk) - Fl(i,j,k)
+                        
+    end do
+    !$omp end do
+    !$omp do
+    do i = 1, size(Scfly_points)
+      xi = Scfly_points(i)%xi
+      yj = Scfly_points(i)%yj
+      zk = Scfly_points(i)%zk
+      Scal2(xi,yj+1,zk) = Scal2(xi,yj+1,zk) + Fl(i,j,k)
+    end do
+    !$omp end do nowait
+
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 0, Prnz, tnz
+     do bj = 1, Prny, tny
+      do bi = 1, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx)
+           Fl(i,j,k) = (TDiff(i,j,k+1)+TDiff(i,j,k)) * (C1*(Scal(i,j,k+1)-Scal(i,j,k)) - C3*(Scal(i,j,k+2)-Scal(i,j,k-1))) * Az
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+    !$omp do schedule(runtime) collapse(3)
+    do bk = 1, Prnz, tnz
+     do bj = 1, Prny, tny
+      do bi = 1, Prnx, tnx
+       do k = bk, min(bk+tnz-1, Prnz)
+        do j = bj, min(bj+tny-1, Prny)
+         do i = bi, min(bi+tnx-1, Prnx)
+             Scal2(i,j,k) = Scal2(i,j,k) + (Fl(i,j,k)-Fl(i,j,k-1))
+         end do
+        end do
+       end do
+      end do
+     end do
+    end do
+    !$omp end do
+
+    !$omp do
+    do i = 1, size(Scflz_points)
+      xi = Scflz_points(i)%xi
+      yj = Scflz_points(i)%yj
+      zk = Scflz_points(i)%zk
+      Scal2(xi,yj,zk) = Scal2(xi,yj,zk) - Fl(i,j,k)
+    end do
+    !$omp end do
+    !$omp do
+    do i = 1, size(Scflz_points)
+      xi = Scflz_points(i)%xi
+      yj = Scflz_points(i)%yj
+      zk = Scflz_points(i)%zk
+      Scal2(xi,yj,zk+1) = Scal2(xi,yj,zk+1) + Fl(i,j,k)
+    end do
+    !$omp end do
+    !$omp end parallel
+  end subroutine ScalarDiffusion_4ord_5point
+
+
+
+
+
+
+
+
+
   subroutine AddScalarDiffVector(ScU, ScV, ScW, Scal, weight, probes_flux, px, py, pz)
     real(knd), contiguous, intent(inout) :: ScU(:,:,:)
     real(knd), contiguous, intent(inout) :: ScV(:,:,:)
     real(knd), contiguous, intent(inout) :: ScW(:,:,:)
-    real(knd), contiguous, intent(in)    :: Scal(-1:,-1:,-1:)
+    real(knd), contiguous, intent(in)    :: Scal(-2:,-2:,-2:)
     real(knd), intent(in) :: weight
     real(knd), intent(out) :: probes_flux(:,:) !component, position
     integer, intent(in) :: px(:), py(:), pz(:)

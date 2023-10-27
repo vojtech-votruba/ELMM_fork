@@ -1,0 +1,45 @@
+#!/bin/bash
+declare -a arr=("profu"
+                "profuw"
+                "profvw"
+                "proftke"
+                "profdissip"
+                "profuu"
+                "profvv"
+                "profww"
+                "proftemp"
+                "proftempfl"
+                "proftt"
+                "profmoist"
+                "profmoistfl"
+                "profmm"
+                "profscal"
+                "profscalfl"
+                "profss"
+                "profother")
+
+
+if find im-1-1-*/ -wholename "im-1-1-*/instant_profiles" | grep "/" > /dev/null; then
+  mkdir -p instant_profiles
+else
+  exit 0
+fi
+
+
+n=1
+while :; do
+  found=false
+  for i in "${arr[@]}"
+  do
+    result=$(find im-1-1-*/ -wholename "im-1-1-*/instant_profiles/$i-$n.txt")
+    if echo $result | grep "/" > /dev/null; then
+      echo $result | xargs cat | sort -g > "./instant_profiles/$i-$n.txt"
+      found=true
+    fi
+  done
+
+  if [ "$found" = false ]; then exit 0;  fi
+  n=$(($n + 1)) 
+done
+ 
+

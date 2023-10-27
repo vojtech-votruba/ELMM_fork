@@ -241,7 +241,7 @@ program extend_periodic_x
   call GetEndianness
 
   if (command_argument_count()<1) then
-    write(*,*) "Usage: extend_periodic_x file_name [n_times]"
+    write(*,*) "Usage: extend_periodic_x file_name nx_times,ny_times"
     stop 1
   end if
  

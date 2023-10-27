@@ -79,8 +79,8 @@ contains
     use WaterThermodynamics, only: compute_liquid_water_content
     real(knd), contiguous, intent(in)    :: U(-2:,-2:,-2:), V(-2:,-2:,-2:), W(-2:,-2:,-2:)
     real(knd), contiguous, intent(in)    :: Pr(-1:,-1:,-1:)
-    real(knd), contiguous, intent(inout) :: Temperature(-1:,-1:,-1:), Moisture(-1:,-1:,-1:)
-    real(knd), contiguous, intent(inout) :: Scalar(-1:,-1:,-1:,1:)
+    real(knd), contiguous, intent(inout) :: Temperature(-2:,-2:,-2:), Moisture(-2:,-2:,-2:)
+    real(knd), contiguous, intent(inout) :: Scalar(-2:,-2:,-2:,1:)
     real(knd), intent(in)                :: dt
     real(knd), contiguous, intent(out)   :: temperature_flux_profile(:)
     real(knd), contiguous, intent(out)   :: moisture_flux_profile(:)
@@ -93,28 +93,14 @@ contains
 
       called = 1
 
-      allocate(Scalar_adv(lbound(Scalar,1):ubound(Scalar,1), &
-                          lbound(Scalar,2):ubound(Scalar,2), &
-                          lbound(Scalar,3):ubound(Scalar,3), &
-                          lbound(Scalar,4):ubound(Scalar,4)))
-      allocate(Scalar_2(lbound(Scalar,1):ubound(Scalar,1), &
-                        lbound(Scalar,2):ubound(Scalar,2), &
-                        lbound(Scalar,3):ubound(Scalar,3), &
-                        lbound(Scalar,4):ubound(Scalar,4)))
+      allocate(Scalar_adv, mold=Scalar)
+      allocate(Scalar_2, mold=Scalar)
 
-      allocate(Temperature_adv(lbound(Temperature,1):ubound(Temperature,1), &
-                               lbound(Temperature,2):ubound(Temperature,2), &
-                               lbound(Temperature,3):ubound(Temperature,3)))
-      allocate(Temperature_2(lbound(Temperature,1):ubound(Temperature,1), &
-                            lbound(Temperature,2):ubound(Temperature,2), &
-                            lbound(Temperature,3):ubound(Temperature,3)))
+      allocate(Temperature_adv, mold=Temperature)
+      allocate(Temperature_2, mold=Temperature)
 
-      allocate(Moisture_adv(lbound(Moisture,1):ubound(Moisture,1), &
-                               lbound(Moisture,2):ubound(Moisture,2), &
-                               lbound(Moisture,3):ubound(Moisture,3)))
-      allocate(Moisture_2(lbound(Moisture,1):ubound(Moisture,1), &
-                            lbound(Moisture,2):ubound(Moisture,2), &
-                            lbound(Moisture,3):ubound(Moisture,3)))
+      allocate(Moisture_adv, mold=Moisture)
+      allocate(Moisture_2, mold=Moisture)
     end if
 
     call DivergenceWM(U, V, W)
@@ -204,7 +190,7 @@ contains
                  BoundMoisture, MoistureExtra, &
                  moisture_flux_profile)
       
-      where (Prtype(-1:Prnx+2,-1:Prny+2,-1:Prnz+2)>0) Moisture = moisture_ref
+      where (Prtype(-2:Prnx+3,-2:Prny+3,-2:Prnz+3)>0) Moisture = moisture_ref
       
     end if
     
@@ -232,7 +218,7 @@ contains
                        boundary_procedure, extra_procedure, &
                        flux_profile)
         use Large_scale_processes, only: enable_subsidence_profile, apply_subsidence_profile
-        real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: Array, Array2, Array_adv
+        real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: Array, Array2, Array_adv
         integer, intent(in) :: scalar_type, btype(6)
         procedure(boundary_interface) :: boundary_procedure
         procedure(extra_interface) :: extra_procedure
@@ -265,7 +251,13 @@ contains
         end do
         !$omp end parallel do
 
-        if (explicit_scalar_diffusion) call ScalarDiffusion_nobranch(Array_adv, Array)
+        if (explicit_scalar_diffusion) then
+          if (discretization_order==4) then
+            call ScalarDiffusion_4ord_5point(Array_adv, Array)
+          else
+            call ScalarDiffusion_nobranch(Array_adv, Array)
+          end if
+        end if
 
         if (enable_subsidence_profile) call apply_subsidence_profile(Array_adv, Array)
 
@@ -557,7 +549,7 @@ contains
   endfunction DepositionFlux
 
   subroutine Deposition(Scal, coef)
-    real(knd), dimension(-1:,-1:,-1:,1:), contiguous, intent(inout) :: Scal
+    real(knd), dimension(-2:,-2:,-2:,1:), contiguous, intent(inout) :: Scal
     real(knd), intent(in) :: coef
     integer   :: i, j
     real(knd) :: deptmp
@@ -588,7 +580,7 @@ contains
 
 
   subroutine Gravsettling(Scal, coef)
-    real(knd), dimension(-1:,-1:,-1:,1:), contiguous, intent(inout) :: Scal
+    real(knd), dimension(-2:,-2:,-2:,1:), contiguous, intent(inout) :: Scal
     integer :: i, j, k, l
     real(knd), dimension(Prnx,Prny,Prnz) :: flux
     real(knd) :: coef, press, temp, us
@@ -621,7 +613,7 @@ contains
   pure real(knd) function Rig(i, j, k, U, V, temperature)
     integer, intent(in) :: i, j, k
     real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in) :: U, V
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(in) :: temperature
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in) :: temperature
     real(knd) :: num, denom
 
     num = (grav_acc/temperature_ref) * (temperature(i,j,k+1)-temperature(i,j,k-1)) / &
@@ -679,10 +671,10 @@ contains
 
   subroutine InitScalarProfile(ScalarIn, ScalarProfile, default_value)
     use Interpolation
-    real(knd), contiguous, intent(inout) :: ScalarIn(-1:,-1:)
+    real(knd), contiguous, intent(inout) :: ScalarIn(-2:,-2:)
     type(TScalarProfile), intent(inout) :: ScalarProfile
     real(knd), intent(in) :: default_value
-    integer   :: SectionToUse(-1:ubound(ScalarIn,2))
+    integer   :: SectionToUse(lbound(ScalarIn,2):ubound(ScalarIn,2))
     integer   :: section, nSections, s
     integer   :: i, j, k
     real(knd) :: temp
@@ -775,9 +767,9 @@ contains
   subroutine InitScalar(ScalarIn, ScalarProfile, Sc)
     use rng_par_zig
     !$ use omp_lib
-    real(knd), contiguous, intent(in)  :: ScalarIn(-1:,-1:)
+    real(knd), contiguous, intent(in)  :: ScalarIn(-2:,-2:)
     type(TScalarProfile), intent(in)  :: ScalarProfile
-    real(knd), contiguous, intent(out) :: Sc(-1:,-1:,-1:)
+    real(knd), contiguous, intent(out) :: Sc(-2:,-2:,-2:)
     real(knd) :: p
     integer   :: i, j, k, tid
 

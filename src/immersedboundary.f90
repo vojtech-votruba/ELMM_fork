@@ -582,13 +582,13 @@ module ImmersedBoundary
 contains
 
   subroutine  Scalar_ImmersedBoundaries(Scal)
-    real(knd), contiguous :: Scal(-1:,-1:,-1:)
+    real(knd), contiguous :: Scal(-2:,-2:,-2:)
     integer :: i
 
     !$omp parallel do
     do i = 1, size(ScalFlIBPoints)
       Scal(ScalFlIBPoints(i)%xi, ScalFlIBPoints(i)%yj, ScalFlIBPoints(i)%zk) = &
-        TIBPoint_Interpolate(ScalFlIBPoints(i), Scal, -1)
+        TIBPoint_Interpolate(ScalFlIBPoints(i), Scal, -2)
     end do
     !$omp end parallel do
   end subroutine

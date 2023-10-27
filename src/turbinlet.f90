@@ -552,15 +552,11 @@ contains
   end subroutine
 
   subroutine turbulence_generator_init_mean_profiles(g)
-    use ieee_exceptions
     class(turbulence_generator), intent(inout) :: g
     real(knd) :: Ustar_prof, utmp
     integer :: k, maxj, maxk
     logical :: fix_direction
     
-    CALL IEEE_SET_HALTING_MODE(IEEE_DIVIDE_BY_ZERO, .TRUE.)
-    CALL IEEE_SET_HALTING_MODE(IEEE_OVERFLOW, .TRUE.)
-    CALL IEEE_SET_HALTING_MODE(IEEE_INVALID, .TRUE.)
     
     if (g%direction==2) then
       allocate(g%Uinavg(-2:Unx+3,-2:Unz+3), g%Vinavg(-2:Vnx+3,-2:Vnz+3), g%Winavg(-2:Wnx+3,-2:Wnz+3))
@@ -662,7 +658,6 @@ contains
   
   
   subroutine turbulence_generator_get_mean_profile_from_file(g, fname)
-    use ieee_exceptions
     use Interpolation
     class(turbulence_generator), intent(inout) :: g
     character(*), intent(in) :: fname
@@ -673,10 +668,6 @@ contains
     real(knd) :: r4(4)
     real(knd), allocatable :: z(:), up(:), vp(:), wp(:), cu(:,:), cv(:,:), cw(:,:)
     
-    
-    CALL IEEE_SET_HALTING_MODE(IEEE_DIVIDE_BY_ZERO, .TRUE.)
-    CALL IEEE_SET_HALTING_MODE(IEEE_OVERFLOW, .TRUE.)
-    CALL IEEE_SET_HALTING_MODE(IEEE_INVALID, .TRUE.)
     
     open(newunit=unit,file=fname,status="old",action="read",iostat = io)
     if (io/=0) then
@@ -848,9 +839,11 @@ contains
       j = 1
       do k = 1, Prnz
         !a small inconsistency in z due to the staggered grid
+        !cannot use zW(k) for ww, because the last point could use the value from the wall
+        !consider re-intorpolating later
         uu = linear_interpolation_eval(zPr(k), z, c_stress(:,:,1), j)
         vv = linear_interpolation_eval(zPr(k), z, c_stress(:,:,2), j)
-        ww = linear_interpolation_eval(zW(k),  z, c_stress(:,:,3), j)
+        ww = linear_interpolation_eval(zPr(k),  z, c_stress(:,:,3), j)
         uv = linear_interpolation_eval(zPr(k), z, c_stress(:,:,4), j)
         uw = linear_interpolation_eval(zPr(k), z, c_stress(:,:,5), j)
         vw = linear_interpolation_eval(zPr(k), z, c_stress(:,:,6), j)

@@ -19,7 +19,9 @@ module exchange_par
   
   public par_exchange_boundaries, par_exchange_boundaries_xz, par_exchange_boundaries_yz, &
          par_exchange_Pr, &
-         par_exchange_Q, par_exchange_Sc_x, par_exchange_Sc_y, par_exchange_Sc_z, &
+         par_exchange_Q, &
+         par_exchange_Sc_x, par_exchange_Sc_y, par_exchange_Sc_z, &
+         par_exchange_visc_x, par_exchange_visc_y, par_exchange_visc_z, &
          par_exchange_U_x, par_exchange_U_y, par_exchange_U_z, &
          par_exchange_UVW, &
          par_init_exchange
@@ -61,12 +63,20 @@ contains
                           Unx, Uny, Unz, &
                           Vnx, Vny, Vnz, &
                           Wnx, Wny, Wnz
-                          
+     
+    !U 
     call init_mpi_derived_types(send_mpi_types(:,1), recv_mpi_types(:,1), Unx, Uny, Unz, -2, 3)
+    !V
     call init_mpi_derived_types(send_mpi_types(:,2), recv_mpi_types(:,2), Vnx, Vny, Vnz, -2, 3)
-    call init_mpi_derived_types(send_mpi_types(:,3), recv_mpi_types(:,3), Wnx, Wny, Wnz, -2, 3)  
-    call init_mpi_derived_types(send_mpi_types(:,4), recv_mpi_types(:,4), Prnx, Prny, Prnz, -1, 2)
+    !W
+    call init_mpi_derived_types(send_mpi_types(:,3), recv_mpi_types(:,3), Wnx, Wny, Wnz, -2, 3)
+    !Scalars
+    call init_mpi_derived_types(send_mpi_types(:,4), recv_mpi_types(:,4), Prnx, Prny, Prnz, -2, 3)
+    !Viscosity, TDiff
+    call init_mpi_derived_types(send_mpi_types(:,5), recv_mpi_types(:,5), Prnx, Prny, Prnz, -1, 2)
+    !Pr
     call init_mpi_derived_types(send_mpi_types(:,6), recv_mpi_types(:,6), Prnx, Prny, Prnz, -1, 2)
+    !Q
     call init_mpi_derived_types_Q(send_mpi_types(:,7), recv_mpi_types(:,7), Prnx, Prny, Prnz)
   end subroutine
 
@@ -293,23 +303,45 @@ contains
   
   subroutine par_exchange_Sc_x(U, SBtype)
     use Parameters, only: Prnx, Prny, Prnz
-    real(knd), intent(inout) :: U(-1:,-1:,-1:)
+    real(knd), intent(inout) :: U(-2:,-2:,-2:)
     integer, intent(in) :: SBtype(6)
     call par_exchange_boundaries(U, SBtype, 4, dir=1)
   end subroutine
   
   subroutine par_exchange_Sc_y(U, SBType)
     use Parameters, only: Prnx, Prny, Prnz
-    real(knd), intent(inout) :: U(-1:,-1:,-1:)
+    real(knd), intent(inout) :: U(-2:,-2:,-2:)
     integer, intent(in) :: SBtype(6)
     call par_exchange_boundaries(U, SBtype, 4, dir=2)
   end subroutine
   
   subroutine par_exchange_Sc_z(U, SBType)
     use Parameters, only: Prnx, Prny, Prnz
-    real(knd), intent(inout) :: U(-1:,-1:,-1:)
+    real(knd), intent(inout) :: U(-2:,-2:,-2:)
     integer, intent(in) :: SBtype(6)
     call par_exchange_boundaries(U, SBtype, 4, dir=3)
+  end subroutine
+   
+
+  subroutine par_exchange_visc_x(U, SBtype)
+    use Parameters, only: Prnx, Prny, Prnz
+    real(knd), intent(inout) :: U(-1:,-1:,-1:)
+    integer, intent(in) :: SBtype(6)
+    call par_exchange_boundaries(U, SBtype, 5, dir=1)
+  end subroutine
+  
+  subroutine par_exchange_visc_y(U, SBType)
+    use Parameters, only: Prnx, Prny, Prnz
+    real(knd), intent(inout) :: U(-1:,-1:,-1:)
+    integer, intent(in) :: SBtype(6)
+    call par_exchange_boundaries(U, SBtype, 5, dir=2)
+  end subroutine
+  
+  subroutine par_exchange_visc_z(U, SBType)
+    use Parameters, only: Prnx, Prny, Prnz
+    real(knd), intent(inout) :: U(-1:,-1:,-1:)
+    integer, intent(in) :: SBtype(6)
+    call par_exchange_boundaries(U, SBtype, 5, dir=3)
   end subroutine
    
  
@@ -346,24 +378,30 @@ contains
     if (Btype(We)==BC_MPI_PERIODIC.or.Btype(Ea)==BC_MPI_PERIODIC) then
       if (iim==1) then
         call send(Phi, We)
+        call recv(Phi, We)
       else if (iim==nxims) then
         call recv(Phi, Ea)
+        call send(Phi, Ea)
       end if     
     end if
 
     if (Btype(So)==BC_MPI_PERIODIC.or.Btype(No)==BC_MPI_PERIODIC) then
       if (jim==1) then
         call send(Phi, So)
+        call recv(Phi, So)
       else if (jim==nyims) then
         call recv(Phi, No)
+        call send(Phi, No)
       end if
     end if
           
     if (Btype(Bo)==BC_MPI_PERIODIC.or.Btype(To)==BC_MPI_PERIODIC) then
       if (kim==1) then
         call send(Phi, Bo)
+        call recv(Phi, Bo)
       else if (kim==nzims) then
         call recv(Phi, To)
+        call send(Phi, To)
       end if
     end if
 

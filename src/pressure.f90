@@ -846,7 +846,7 @@ contains
   subroutine InitHydrostaticPressure(Pr, Temperature, Moisture)
     use PhysicalProperties
     real(knd), contiguous, intent(out) :: Pr(-1:,-1:,-1:)
-    real(knd), contiguous, intent(in) :: Temperature(-1:,-1:,-1:), Moisture(-1:,-1:,-1:)
+    real(knd), contiguous, intent(in) :: Temperature(-2:,-2:,-2:), Moisture(-2:,-2:,-2:)
     real(knd) :: t_virt, t_virt_prev, p
     integer :: i, j, k
 
@@ -943,7 +943,7 @@ contains
     use custom_par
     use PhysicalProperties
     real(knd), contiguous, intent(out) :: Pr(-1:,-1:,-1:)
-    real(knd), contiguous, intent(in) :: Temperature(-1:,-1:,-1:), Moisture(-1:,-1:,-1:)
+    real(knd), contiguous, intent(in) :: Temperature(-2:,-2:,-2:), Moisture(-2:,-2:,-2:)
     real(knd) :: t_virt, t_virt_prev, p
     integer :: i, j, k
     integer :: nz

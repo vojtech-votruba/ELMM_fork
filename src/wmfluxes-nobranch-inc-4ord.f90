@@ -48,7 +48,8 @@
 
 
       !deconvolution of flux
-      ! [Fl]i = -1/24*Fl(i) + 13*Fl(i)/12 -1/24*Fl(i)
+      ! [Fl]i = -1/24*Fl(i+1) + 13*Fl(i)/12 -1/24*Fl(i-1)
+      ! ([Fl]i+1 - [Fl]i) / dx = 9/8*(Fl(i+1)-Fl(i)) / dx - 1/8*(Fl(i+2)-Fl(i-1))/(3*dx)
 
       
       

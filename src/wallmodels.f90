@@ -128,6 +128,7 @@ module Wallmodels
          AddWMPoint, AddWMPointUVW, &
          MoveWMPointsToArray, GetOutsideBoundariesWM, InitWMMasks, &
          ComputeViscsWM, ComputeUVWFluxesWM, DivergenceWM, &
+         UpdateSurfaceTemperatures, &
          GroundDeposition, &
          GroundUstar, GroundUstarUVW, &
          GroundTFlux, GroundTFluxUVW, &
@@ -1117,24 +1118,53 @@ contains
     real(knd), contiguous, intent(in)    :: U(-2:,-2:,-2:),V(-2:,-2:,-2:),W(-2:,-2:,-2:)
     integer :: i, xi, yj, zk
     real(knd) :: div
+    real(knd), parameter :: D0 = 13._knd/12, D1 = -1._knd/24
 
-    !$omp parallel do private(i, xi, yj, zk, div)
-    do i=1,size(WMPoints)
-      xi = WMPoints(i)%xi
-      yj = WMPoints(i)%yj
-      zk = WMPoints(i)%zk
+    
+    if (discretization_order==4) then
+      ! in 4th order advective velocities by deconvolution    
+      ! c.f. Hokpunna, Manhart, 2010, eq. 11, https://dx.doi.org/10.1016/j.jcp.2010.05.042
+      
+      !$omp parallel do private(i, xi, yj, zk, div)
+      do i=1,size(WMPoints)
+        xi = WMPoints(i)%xi
+        yj = WMPoints(i)%yj
+        zk = WMPoints(i)%zk
 
-      div = 0
-      if (Prtype(xi+1,yj,zk)<=0) div = div + U(xi,yj,zk) / dxmin
-      if (Prtype(xi-1,yj,zk)<=0) div = div - U(xi-1,yj,zk) / dxmin
-      if (Prtype(xi,yj+1,zk)<=0) div = div + V(xi,yj,zk) / dymin
-      if (Prtype(xi,yj-1,zk)<=0) div = div - V(xi,yj-1,zk) / dymin
-      if (Prtype(xi,yj,zk+1)<=0) div = div + W(xi,yj,zk) / dzPr(zk)
-      if (Prtype(xi,yj,zk-1)<=0) div = div - W(xi,yj,zk-1) / dzPr(zk)
-      WMPoints(i)%div = div
-    end do
-    !$omp end parallel do
+        div = 0
+        if (Prtype(xi+1,yj,zk)<=0) &
+          div = div + (D1*U(xi+1,yj,zk) + D0*U(xi,yj,zk)   + D1*U(xi-1,yj,zk)) / dxmin
+        if (Prtype(xi-1,yj,zk)<=0) &
+          div = div - (D1*U(xi,yj,zk)   + D0*U(xi-1,yj,zk) + D1*U(xi-2,yj,zk)) / dxmin
+        if (Prtype(xi,yj+1,zk)<=0) &
+          div = div + (D1*V(xi,yj+1,zk) + D0*V(xi,yj,zk)   + D1*V(xi,yj-1,zk)) / dymin
+        if (Prtype(xi,yj-1,zk)<=0) &
+          div = div - (D1*V(xi,yj,zk)   + D0*V(xi,yj-1,zk) + D1*V(xi,yj-2,zk)) / dymin
+        if (Prtype(xi,yj,zk+1)<=0) &
+          div = div + (D1*W(xi,yj,zk+1) + D0*W(xi,yj,zk)   + D1*W(xi,yj,zk-1)) / dzmin
+        if (Prtype(xi,yj,zk-1)<=0) &
+          div = div - (D1*W(xi,yj,zk)   + D0*W(xi,yj,zk-1) + D1*W(xi,yj,zk-2)) / dzmin
+        WMPoints(i)%div = div
+      end do
+      !$omp end parallel do
+    else
+      !$omp parallel do private(i, xi, yj, zk, div)
+      do i=1,size(WMPoints)
+        xi = WMPoints(i)%xi
+        yj = WMPoints(i)%yj
+        zk = WMPoints(i)%zk
 
+        div = 0
+        if (Prtype(xi+1,yj,zk)<=0) div = div + U(xi,yj,zk) / dxmin
+        if (Prtype(xi-1,yj,zk)<=0) div = div - U(xi-1,yj,zk) / dxmin
+        if (Prtype(xi,yj+1,zk)<=0) div = div + V(xi,yj,zk) / dymin
+        if (Prtype(xi,yj-1,zk)<=0) div = div - V(xi,yj-1,zk) / dymin
+        if (Prtype(xi,yj,zk+1)<=0) div = div + W(xi,yj,zk) / dzPr(zk)
+        if (Prtype(xi,yj,zk-1)<=0) div = div - W(xi,yj,zk-1) / dzPr(zk)
+        WMPoints(i)%div = div
+      end do
+      !$omp end parallel do
+    end if
   end subroutine
 
 
@@ -1539,30 +1569,28 @@ contains
   end function PsiH_MO
 
 
-  pure real(knd) function PsiM_MO_mod(zeta) result(res)
-    real(knd),intent(in):: zeta
+  pure real(knd) function PsiM_MO_mod(zeta, k_U) result(res)
+    real(knd),intent(in):: zeta, k_U
     real(knd) :: x
-    !For L defined without k!
+    !Original formulation of Zilitinkevich, Esau - 2006 was for L defined without k!
     if (zeta<0) then
-      x = (1-6._knd*zeta)**(1/4._knd)
+      x = (1-6._knd*zeta*k_U)**(1/4._knd)
       res = log(((1+x**2)/2._knd)*((1+x)/2._knd)**2)-2._knd*atan(x)+pi/2
     else
-      !Zilitinkevich, Esau - 2006
-      res = - 3 * zeta**(5._knd/6._knd) 
+      res = - 3 * (zeta*k_U)**(5._knd/6._knd) 
     end if
   end function PsiM_MO_mod
 
 
-  pure real(knd) function PsiH_MO_mod(zeta) result(res)
-    real(knd),intent(in):: zeta
+  pure real(knd) function PsiH_MO_mod(zeta, k_U) result(res)
+    real(knd),intent(in):: zeta, k_U
     real(knd) :: x
-    !For L defined without k!
+    !Original formulation of Zilitinkevich, Esau - 2006 was for L defined without k!
     if (zeta<0) then
-      x = (1-6._knd*zeta)**(1/4._knd)
+      x = (1-6._knd*zeta*k_U)**(1/4._knd)
       res = 2._knd*log((1+x**2)/2._knd)
     else
-      !Zilitinkevich, Esau - 2006
-      res = - 2.5_knd * zeta**(4._knd/5._knd)
+      res = - 2.5_knd * (zeta*k_U)**(4._knd/5._knd)
     end if
   end function PsiH_MO_mod
 
@@ -1639,7 +1667,7 @@ contains
     real(knd),parameter :: eps = 1e-3_knd
     real(knd),parameter :: yplcrit = 11.225_knd
     real(knd),parameter :: k_U = 0.4_knd
-    real(knd),parameter :: k_T = 0.47_knd
+    real(knd),parameter :: k_T = 0.47_knd !0.47 for Zilitinkevich, Esau - 2006
     real(knd) :: zL, zL0, psi_m, psi_h, ustar_lam, dist_plus
     integer :: i
 
@@ -1666,11 +1694,10 @@ contains
        do
          i = i+1
          
-         !L does not contain the Karman constant!
-         zL =  - dist * grav_acc * temperature_flux / (temperature_ref * ustar**3)
+         zL =  - dist * grav_acc * temperature_flux / (k_U * temperature_ref * ustar**3)
          
-         psi_m = PsiM_MO_mod(zL)
-         psi_h = PsiH_MO_mod(zL)
+         psi_m = PsiM_MO_mod(zL, k_U)
+         psi_h = PsiH_MO_mod(zL, k_U)
          
          ustar = vel * k_U / (log(dist/z0) - psi_m)
          temperature_flux = - tempdif * ustar * k_T / (log(dist/z0H) - psi_h)
@@ -1702,7 +1729,8 @@ contains
     real(knd),parameter :: eps = 1e-3_knd
     real(knd),parameter :: yplcrit = 11.225_knd
     real(knd),parameter :: k_U = 0.4_knd
-    real(knd),parameter :: k_T = 0.47_knd, k_Q = k_T
+    real(knd),parameter :: k_T = 0.47_knd !0.47 for Zilitinkevich, Esau - 2006
+    real(knd),parameter :: k_Q = k_T
     real(knd),parameter :: e_coef = 0.61_knd
     real(knd) :: zL, zL0, psi_m, psi_h, psi_e
     real(knd) :: tempdif, moistdif, virt_flux
@@ -1732,11 +1760,10 @@ contains
          virt_flux = temperature_flux * (1 + e_coef * moist) + &
                      e_coef * temp * moisture_flux
          
-         !L does not contain the Karman constant!
-         zL =  - dist * grav_acc * virt_flux / (temperature_ref * ustar**3)
+         zL =  - dist * grav_acc * virt_flux / (k_U * temperature_ref * ustar**3)
          
-         psi_m = PsiM_MO_mod(zL)
-         psi_h = PsiH_MO_mod(zL)
+         psi_m = PsiM_MO_mod(zL, k_U)
+         psi_h = PsiH_MO_mod(zL, k_U)
          psi_e = psi_h
          
          ustar = vel * k_U / (log(dist/z0) - psi_m)
@@ -2017,9 +2044,9 @@ contains
 
   subroutine ComputeViscsWM(U,V,W,Pr,Temperature,Moisture)
     real(knd),dimension(-2:,-2:,-2:),intent(in) :: U,V,W
-    real(knd),dimension(-1:,-1:,-1:),   intent(in) :: Pr
-    real(knd),dimension(-1:,-1:,-1:),intent(in) :: Temperature
-    real(knd),dimension(-1:,-1:,-1:),intent(in) :: Moisture
+    real(knd),dimension(-1:,-1:,-1:),intent(in) :: Pr
+    real(knd),dimension(-2:,-2:,-2:),intent(in) :: Temperature
+    real(knd),dimension(-2:,-2:,-2:),intent(in) :: Moisture
     integer :: i, xi, yj, zk
     real(knd) :: tdif
     real(knd) :: dist(3), vel(3), wallvel(3), prgrad(3)
@@ -2126,9 +2153,9 @@ contains
 
   subroutine ComputeUVWFluxesWM(U, V, W, Pr, Temperature, Moisture)
     real(knd),dimension(-2:,-2:,-2:),intent(in) :: U,V,W
-    real(knd),dimension(-1:,-1:,-1:),   intent(in) :: Pr
-    real(knd),dimension(-1:,-1:,-1:),intent(in) :: Temperature
-    real(knd),dimension(-1:,-1:,-1:),intent(in) :: Moisture
+    real(knd),dimension(-1:,-1:,-1:),intent(in) :: Pr
+    real(knd),dimension(-2:,-2:,-2:),intent(in) :: Temperature
+    real(knd),dimension(-2:,-2:,-2:),intent(in) :: Moisture
 
 
     call fluxes(UxmWMpoints, 1, MINUSX, xU, yPr, zPr)
@@ -2307,7 +2334,7 @@ contains
 
   pure function local_value(C,component,xi,yj,zk) result(val)
     real(knd) :: val
-    real(knd),dimension(-1:,-1:,-1:),intent(in) :: C
+    real(knd),dimension(-2:,-2:,-2:),intent(in) :: C
     integer, intent(in) :: component, xi, yj, zk
 
     select case (component)
@@ -2365,6 +2392,43 @@ contains
         vel(3) =   W(xi, yj, zk)
     end select
   end function
+  
+  
+  
+  
+  
+  
+  subroutine UpdateSurfaceTemperatures(U, V, W, Pr, Temperature, Moisture)
+    real(knd),dimension(-2:,-2:,-2:),intent(in) :: U,V,W
+    real(knd),dimension(-1:,-1:,-1:),intent(in) :: Pr
+    real(knd),dimension(-2:,-2:,-2:),intent(in) :: Temperature
+    real(knd),dimension(-2:,-2:,-2:),intent(in) :: Moisture
+    integer :: i, j
+    
+#ifdef CUSTOM_SURFACE_TEMPERATURE  
+    if (TempBtype(Bo)==BC_DIRICHLET) then
+      do j = 1, Prny
+        do i = 1, Prnx
+          SideTemp(Bo) = SurfaceTemperature(xPr(i), yPr(j), zW(0), time_stepping%time)
+        end do
+      end do
+    end if
+#elif CUSTOM_SURFACE_TEMPERATURE_FLUX
+    if (TempBtype(Bo)==BC_CONSTFLUX) then
+      do j = 1, Prny
+        do i = 1, Prnx
+          SideTemp(Bo) = SurfaceTemperatureFlux(xPr(i), yPr(j), zW(0), time_stepping%time)
+        end do
+      end do
+    end if
+#endif  
+  
+  end subroutine
+  
+  
+  
+  
+  
 
 
   real(knd) function GroundUstar()

@@ -239,14 +239,29 @@ contains
     real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in)    :: U, V, W
     real(knd), dimension(-2:,-2:,-2:), contiguous, intent(out)   :: U2, V2, W2
     real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: Ustar, Vstar ,Wstar
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(in)    :: Temperature
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(in)    :: Moisture
-    real(knd), dimension(-1:,-1:,-1:,:), contiguous, intent(in)  :: Scalar
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in)    :: Temperature
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in)    :: Moisture
+    real(knd), dimension(-2:,-2:,-2:,:), contiguous, intent(in)  :: Scalar
     real(knd), dimension(-1:,-1:,-1:), contiguous, intent(in)    :: Pr
     real(knd), dimension(1:3), intent(in) :: beta,rho
     integer,   intent(in) :: RK_stage
     real(knd), intent(in) :: dt
     integer :: i,j,k
+    
+#ifdef CUSTOM_FORCING
+    interface
+      subroutine CustomForcingProcedure(U2, V2, W2, U, V, W, &
+                                     Temperature, Moisture, Scalar, Pr)
+        use Parameters
+        real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in)    :: U, V, W
+        real(knd), dimension(-2:,-2:,-2:), contiguous, intent(out)   :: U2, V2, W2
+        real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in)    :: Temperature
+        real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in)    :: Moisture
+        real(knd), dimension(-2:,-2:,-2:,:), contiguous, intent(in)  :: Scalar
+        real(knd), dimension(-1:,-1:,-1:), contiguous, intent(in)    :: Pr
+      end subroutine
+    end interface
+#endif
 
     if (RK_stage>1) then
       !$omp parallel private(i,j,k)
@@ -415,7 +430,7 @@ contains
 
     if (explicit_diffusion) then
       if (discretization_order>=3) then
-        call MomentumDiffusion_nobranch_4ord(Ustar, Vstar, Wstar, U, V, W)
+        call MomentumDiffusion_4ord_5point(Ustar, Vstar, Wstar, U, V, W)
       else
         if (gridtype==GRID_VARIABLE_Z) then
           call MomentumDiffusion_variable_z_nobranch_2ord(Ustar, Vstar, Wstar, U, V, W)
@@ -425,6 +440,10 @@ contains
       end if
     end if  
 
+#ifdef CUSTOM_FORCING
+    call CustomForcingProcedure(Ustar, Vstar, Wstar, U, V, W, &
+                                Temperature, Moisture, Scalar, Pr)
+#endif
 
     !$omp parallel private(i,j,k)
     !$omp do
@@ -588,8 +607,8 @@ contains
     use WaterThermodynamics, only: LiquidWater, compute_liquid_water_content
     use BuoyantGases, only: enable_buoyant_scalars
     real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: W
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(in) :: Temperature, Moisture
-    real(knd), dimension(-1:,-1:,-1:,:), contiguous, intent(in) :: Scalar
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in) :: Temperature, Moisture
+    real(knd), dimension(-2:,-2:,-2:,:), contiguous, intent(in) :: Scalar
     real(knd), contiguous, intent(in) :: Pr(-1:,-1:,-1:)
     real(knd) :: A, A2
     integer :: i, j, k
@@ -643,9 +662,9 @@ contains
         do k = 1, Wnz
           do j = 1, Wny
             do i = 1, Wnx
-              !deconvolution of Temperature: e.g., in Hokpunna, Manhart, (2010), JCP 229
+              !interpolation/deconvolution of Temperature: e.g. Morinishi et al. eq. 35 or in Hokpunna, Manhart, (2010), JCP 229
               W(i,j,k) = W(i,j,k) + &
-                A * ( C1 * Temperature(i,j,k+2) + &
+                 A * ( C1 * Temperature(i,j,k+2) + &
                        C0 * Temperature(i,j,k+1) + &
                        C0 * Temperature(i,j,k)   + &
                        C1 * Temperature(i,j,k-1) ) - &
@@ -853,14 +872,16 @@ contains
 
     real(knd), contiguous, intent(in) :: U(-2:,-2:,-2:),V(-2:,-2:,-2:),W(-2:,-2:,-2:)
     real(knd), contiguous, intent(in) :: Pr(-1:,-1:,-1:)
-    real(knd), contiguous, intent(in) :: Temperature(-1:,-1:,-1:)
-    real(knd), contiguous, intent(in) :: Moisture(-1:,-1:,-1:)
+    real(knd), contiguous, intent(in) :: Temperature(-2:,-2:,-2:)
+    real(knd), contiguous, intent(in) :: Moisture(-2:,-2:,-2:)
     integer :: i
 
 
     if (wallmodeltype>0) then
                       !resulting Viscosity intentionally overwritten
                       call ComputeViscsWM(U,V,W,Pr,Temperature,Moisture)
+    else if (enable_buoyancy) then
+                      call UpdateSurfaceTemperatures(U, V, W, Pr, Temperature, Moisture)
     end if
     
 
@@ -868,7 +889,7 @@ contains
 
 
     if (wallmodeltype>0) then
-                    call ComputeUVWFluxesWM(U,V,W,Pr,Temperature,Moisture)
+                    call ComputeUVWFluxesWM(U, V, W, Pr, Temperature, Moisture)
     end if
 
     call BoundViscosity(Viscosity)
@@ -889,13 +910,13 @@ contains
 
 
 
-  subroutine CorrectFlowRate(U, V, W)
+  subroutine CorrectFlowRate(U, V, W, dt)
     use custom_par
 
     real(knd), intent(inout), contiguous, dimension(-2:,-2:,-2:) :: U, V, W
+    real(knd), intent(in) :: dt
 
     real(knd) :: rate_actual
-    real(knd) :: pr_gradient_diff
     integer :: i, j, k
 
     if (flow_rate_x_fixed) then
@@ -909,19 +930,19 @@ contains
 #ifdef PAR        
       call par_broadcast_from_last_x(rate_actual)
 #endif
-      pr_gradient_diff = (rate_actual - flow_rate_x) / ( dymin * dzmin * gPrny * gPrnz)
+      pr_gradient_x_dynamic = (rate_actual - flow_rate_x) / ( dymin * dzmin * gPrny * gPrnz)
 
       !$omp parallel do private(i,j,k)
       do k = 1, Unz
         do j = 1, Uny
           do i = 1, Unx
-            U(i,j,k) = U(i,j,k) -  pr_gradient_diff
+            U(i,j,k) = U(i,j,k) -  pr_gradient_x_dynamic
           end do
         end do
       end do
       !$omp end parallel do
 
-      pr_gradient_x = pr_gradient_x + pr_gradient_diff
+      pr_gradient_x_dynamic = pr_gradient_x_dynamic / dt
     end if
 
       
@@ -936,19 +957,19 @@ contains
 #ifdef PAR        
       call par_broadcast_from_last_y(rate_actual)
 #endif
-      pr_gradient_diff = (rate_actual - flow_rate_y) / (dxmin * dzmin * gPrnx * gPrnz)
+      pr_gradient_y_dynamic = (rate_actual - flow_rate_y) / (dxmin * dzmin * gPrnx * gPrnz)
 
       !$omp parallel do private(i,j,k)
       do k = 1, Vnz
         do j = 1, Vny
           do i = 1, Vnx
-            V(i,j,k) = V(i,j,k) - pr_gradient_diff
+            V(i,j,k) = V(i,j,k) - pr_gradient_y_dynamic
           end do
         end do
       end do
       !$omp end parallel do
 
-      pr_gradient_y = pr_gradient_y + pr_gradient_diff
+      pr_gradient_y_dynamic = pr_gradient_y_dynamic / dt
     end if
 
       
@@ -963,19 +984,19 @@ contains
 #ifdef PAR        
       call par_broadcast_from_last_z(rate_actual)
 #endif
-      pr_gradient_diff = (rate_actual - flow_rate_z) / (dxmin * dymin * gPrnx * gPrny)
+      pr_gradient_z_dynamic = (rate_actual - flow_rate_z) / (dxmin * dymin * gPrnx * gPrny)
 
       !$omp parallel do private(i,j,k)
       do k = 1, Wnz
         do j = 1, Wny
           do i = 1, Wnx
-            W(i,j,k) = W(i,j,k) - pr_gradient_diff
+            W(i,j,k) = W(i,j,k) - pr_gradient_z_dynamic
           end do
         end do
       end do
       !$omp end parallel do
 
-      pr_gradient_z = pr_gradient_z + pr_gradient_diff
+      pr_gradient_z_dynamic = pr_gradient_z_dynamic / dt
     end if
       
   end subroutine CorrectFlowRate

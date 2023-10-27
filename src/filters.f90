@@ -11,7 +11,7 @@ module Filters
 
   integer :: filtertype = 1
 
-  real(knd), parameter :: filter_ratios(0:1) = [ 1.0_knd, 2._knd]
+  real(knd) :: filter_ratios(0:1) = [ 1.0_knd, 2._knd]
 
  
 contains

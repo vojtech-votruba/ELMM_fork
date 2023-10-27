@@ -1087,7 +1087,7 @@ contains
                        npxyz, domain_index, number_of_domains, &
 #endif
                        obstacles_file, probes_file, scalar_probes_file, input_dir, output_dir, &
-                       enable_fixed_flow_rate, &
+                       enable_fixed_flow_rate, set_U_bulk, U_bulk_vec, &
                        enable_in_sponge_x, enable_out_sponge_x, enable_out_sponge_y, &
                        enable_top_sponge, enable_top_sponge_scalar, &
                        enable_liquid, &
@@ -2532,9 +2532,9 @@ contains
     use Endianness
     real(knd), intent(inout) :: U(-2:,-2:,-2:),V(-2:,-2:,-2:),W(-2:,-2:,-2:)
     real(knd), intent(inout) :: Pr(-1:,-1:,-1:)
-    real(knd), intent(inout) :: Temperature(-1:,-1:,-1:)
-    real(knd), intent(inout) :: Moisture(-1:,-1:,-1:)
-    real(knd), intent(inout) :: Scalar(-1:,-1:,-1:,:)
+    real(knd), intent(inout) :: Temperature(-2:,-2:,-2:)
+    real(knd), intent(inout) :: Moisture(-2:,-2:,-2:)
+    real(knd), intent(inout) :: Scalar(-2:,-2:,-2:,:)
     logical, intent(in) :: scalars_optional
     real(real32), allocatable :: buffer(:,:,:), UVWbuffer(:,:,:,:)
     integer :: i, unit, stat, file_stat
@@ -2775,9 +2775,9 @@ contains
 #endif
     use ArrayUtilities
     real(knd),contiguous,intent(inout) :: U(-2:,-2:,-2:),V(-2:,-2:,-2:),W(-2:,-2:,-2:),Pr(-1:,-1:,-1:)
-    real(knd),contiguous,intent(inout) :: Temperature(-1:,-1:,-1:)
-    real(knd),contiguous,intent(inout) :: Moisture(-1:,-1:,-1:)
-    real(knd),contiguous,intent(inout) :: Scalar(-1:,-1:,-1:,:)
+    real(knd),contiguous,intent(inout) :: Temperature(-2:,-2:,-2:)
+    real(knd),contiguous,intent(inout) :: Moisture(-2:,-2:,-2:)
+    real(knd),contiguous,intent(inout) :: Scalar(-2:,-2:,-2:,:)
     real(knd), intent(out) :: dt
     integer :: i,j,k
     real(knd) :: p,x,y,z,x1,x2,y1,y2,z1,z2
@@ -2790,9 +2790,9 @@ contains
       subroutine CustomInitialConditions(U,V,W,Pr,Temperature,Moisture,Scalar)
         use Parameters
         real(knd),contiguous,intent(inout) :: U(-2:,-2:,-2:),V(-2:,-2:,-2:),W(-2:,-2:,-2:),Pr(-1:,-1:,-1:)
-        real(knd),contiguous,intent(inout) :: Temperature(-1:,-1:,-1:)
-        real(knd),contiguous,intent(inout) :: Moisture(-1:,-1:,-1:)
-        real(knd),contiguous,intent(inout) :: Scalar(-1:,-1:,-1:,:)
+        real(knd),contiguous,intent(inout) :: Temperature(-2:,-2:,-2:)
+        real(knd),contiguous,intent(inout) :: Moisture(-2:,-2:,-2:)
+        real(knd),contiguous,intent(inout) :: Scalar(-2:,-2:,-2:,:)
       end subroutine
     end interface
 #endif
@@ -3176,6 +3176,9 @@ contains
           call InitScalarProfile(TempIn,TemperatureProfileObj,temperature_ref)
 
           call InitScalar(TempIn,TemperatureProfileObj,Temperature)
+          
+          !only affects Dirichlet BC's without a wall model
+          call UpdateSurfaceTemperatures(U, V, W, Pr, Temperature, Moisture)
 
         end if !buoyancy and task_type
 
@@ -3499,9 +3502,9 @@ contains
     Vin = 0
     Win = 0
 
-    if (enable_buoyancy) allocate(TempIn(-1:Prny+2,-1:Prnz+2))
+    if (enable_buoyancy) allocate(TempIn(-2:Prny+3,-2:Prnz+3))
 
-    if (enable_moisture) allocate(MoistIn(-1:Prny+2,-1:Prnz+2))
+    if (enable_moisture) allocate(MoistIn(-2:Prny+3,-2:Prnz+3))
 
     select case (inlettype)
       case (ZeroInletType)
@@ -3530,7 +3533,7 @@ contains
 
        if (TempBtype(Bo)==BC_CONSTFLUX.or.TempBtype(Bo)==BC_DIRICHLET) then
 
-         allocate(BsideTFlArr(-1:Prnx+2,-1:Prny+2))
+         allocate(BsideTFlArr(-2:Prnx+3,-2:Prny+3))
 
          if (enable_radiation) then
            BsideTFlArr = 0
@@ -3541,7 +3544,7 @@ contains
          end if
 
          if (TempBtype(Bo)==BC_DIRICHLET) then
-           allocate(BsideTArr(-1:Prnx+2,-1:Prny+2))
+           allocate(BsideTArr(-2:Prnx+3,-2:Prny+3))
            BsideTArr = sideTemp(Bo)
          end if
 
@@ -3558,7 +3561,7 @@ contains
 
        if (MoistBtype(Bo)==BC_CONSTFLUX.or.MoistBtype(Bo)==BC_DIRICHLET) then
 
-         allocate(BsideMFlArr(-1:Prnx+2,-1:Prny+2))
+         allocate(BsideMFlArr(-2:Prnx+3,-2:Prny+3))
 
          if (enable_radiation) then
            BsideMFlArr = 0
@@ -3569,7 +3572,7 @@ contains
          end if
 
          if (MoistBtype(Bo)==BC_DIRICHLET) then
-           allocate(BsideMArr(-1:Prnx+2,-1:Prny+2))
+           allocate(BsideMArr(-2:Prnx+3,-2:Prny+3))
            BsideMArr = sideMoist(Bo)
          end if
 
@@ -3745,14 +3748,19 @@ contains
     if (enable_fixed_flow_rate) then
 
       if (flow_rate_x_fixed) then
-        if (initcondsfromfile==0.and.inlettype==TurbulentInletType.and. &
-            default_turbulence_generator%direction==1) then
-          flow_rate_x = sum(default_turbulence_generator%Uinavg(1:Uny, 1:Unz)) &
-                        * dymin * dzmin
+        if (set_U_bulk) then
+          flow_rate_x = U_bulk_vec(1) * count(Utype(0,1:Uny,1:Unz)<=0) * dymin * dzmin
         else
-          flow_rate_x = sum(U(Unx,1:Uny, 1:Unz)) &
-                        * dymin * dzmin
+          if (initcondsfromfile==0.and.inlettype==TurbulentInletType.and. &
+              default_turbulence_generator%direction==1) then
+            flow_rate_x = sum(default_turbulence_generator%Uinavg(1:Uny, 1:Unz)) &
+                          * dymin * dzmin
+          else
+            flow_rate_x = sum(U(Unx,1:Uny, 1:Unz)) &
+                          * dymin * dzmin
+          end if
         end if
+        
 #ifdef PAR
         flow_rate_x = par_co_sum_plane_yz(flow_rate_x)
         call par_broadcast_from_last_x(flow_rate_x)
@@ -3761,14 +3769,18 @@ contains
 
 
       if (flow_rate_y_fixed) then
-        if (initcondsfromfile==0.and.inlettype==TurbulentInletType.and. &
-            default_turbulence_generator%direction==2) then
-          !average V
-          flow_rate_y = sum(default_turbulence_generator%Vinavg(1:Vny, 1:Vnz)) &
-                        / (Vny*Vnz)
-          flow_rate_y = flow_rate_y * Vnx * Vnz * dxmin * dzmin        
+        if (set_U_bulk) then
+          flow_rate_y = U_bulk_vec(2) * count(Vtype(1:Vnx,0,1:Vnz)<=0) * dxmin * dzmin
         else
-          flow_rate_y = sum(V(1:Vnx, Vny, 1:Vnz)) * dxmin * dzmin
+          if (initcondsfromfile==0.and.inlettype==TurbulentInletType.and. &
+              default_turbulence_generator%direction==2) then
+            !average V
+            flow_rate_y = sum(default_turbulence_generator%Vinavg(1:Vny, 1:Vnz)) &
+                          / (Vny*Vnz)
+            flow_rate_y = flow_rate_y * Vnx * Vnz * dxmin * dzmin        
+          else
+            flow_rate_y = sum(V(1:Vnx, Vny, 1:Vnz)) * dxmin * dzmin
+          end if
         end if
 
 #ifdef PAR
@@ -3779,7 +3791,11 @@ contains
       
 
       if (flow_rate_z_fixed) then
-        flow_rate_z = sum(W(1:Wnx, 1:Wny, Wnz)) * dxmin * dymin
+        if (set_U_bulk) then
+          flow_rate_z = U_bulk_vec(3) * count(Wtype(1:Wnx,1:Wny,0)<=0) * dxmin * dymin
+        else
+          flow_rate_z = sum(W(1:Wnx, 1:Wny, Wnz)) * dxmin * dymin
+        end if
 
 #ifdef PAR
         flow_rate_z = par_co_sum_plane_xy(flow_rate_z)
@@ -3935,7 +3951,9 @@ contains
     
     nt = 1
     !$omp parallel
+    !$omp single
     !$ nt = omp_get_num_threads()
+    !$omp end single
     !$omp end parallel
 
     seed = base

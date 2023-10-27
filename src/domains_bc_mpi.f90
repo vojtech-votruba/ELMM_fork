@@ -54,8 +54,8 @@ contains
   subroutine par_exchange_domain_bounds(U, V, W, Temperature, Moisture, Scalar, time, dt, receive, send)
     !if necessary send or receive the new boundary conditions
     real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in) :: U, V ,W 
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(in) :: Temperature, Moisture
-    real(knd), dimension(-1:,-1:,-1:,1:), contiguous, intent(in) :: Scalar
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in) :: Temperature, Moisture
+    real(knd), dimension(-2:,-2:,-2:,1:), contiguous, intent(in) :: Scalar
     real(tim), intent(in) :: time, dt
     logical, intent(in), optional :: send, receive
 
@@ -1214,7 +1214,7 @@ contains
 
   subroutine par_update_domain_bounds_temperature(Temperature, eff_time)
     !effective time, because it can also reflect individual RK stages
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: Temperature
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: Temperature
     real(knd), intent(in) :: eff_time
     real(knd) :: t_diff
     integer :: i
@@ -1248,7 +1248,7 @@ contains
 
   subroutine par_update_domain_bounds_moisture(Moisture, eff_time)
     !effective time, because it can also reflect individual RK stages
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: Moisture
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: Moisture
     real(knd), intent(in) :: eff_time
     real(knd) :: t_diff
     integer :: i
@@ -1282,7 +1282,7 @@ contains
 
   subroutine par_update_domain_bounds_scalar(Scalar, eff_time)
     !effective time, because it can also reflect individual RK stages
-    real(knd), dimension(-1:,-1:,-1:,1:), contiguous, intent(inout) :: Scalar
+    real(knd), dimension(-2:,-2:,-2:,1:), contiguous, intent(inout) :: Scalar
     real(knd), intent(in) :: eff_time
     real(knd) :: t_diff
     integer :: i, scal
@@ -1343,8 +1343,8 @@ contains
   subroutine par_update_domain_bounds(U, V, W, Temperature, Moisture, Scalar, eff_time)
     !effective time, because it can also reflect individual RK stages
     real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: U, V ,W 
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: Temperature, Moisture
-    real(knd), dimension(-1:,-1:,-1:,1:), contiguous, intent(inout) :: Scalar
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: Temperature, Moisture
+    real(knd), dimension(-2:,-2:,-2:,1:), contiguous, intent(inout) :: Scalar
     real(knd), intent(in) :: eff_time
     real(knd) :: t_diff
     integer :: bi
@@ -1365,8 +1365,8 @@ contains
   subroutine par_domain_bound_relaxation(U, V, W, Temperature, Moisture, Scalar, eff_time)
     !effective time, because it can also reflect individual RK stages
     real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: U, V ,W 
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: Temperature, Moisture
-    real(knd), dimension(-1:,-1:,-1:,1:), contiguous, intent(inout) :: Scalar
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: Temperature, Moisture
+    real(knd), dimension(-2:,-2:,-2:,1:), contiguous, intent(inout) :: Scalar
     real(knd), intent(in) :: eff_time
     real(knd) :: t_diff
     integer :: bi, width
@@ -1814,7 +1814,7 @@ contains
 
   subroutine par_receive_initial_conditions(receive, U, V, W, Pr, Temperature, Moisture, Scalar)
     real(knd), intent(inout) :: U(-2:,-2:,-2:), V(-2:,-2:,-2:) ,W(-2:,-2:,-2:), Pr(-1:,-1:,-1:)
-    real(knd), intent(inout) :: Temperature(-1:,-1:,-1:), Moisture(-1:,-1:,-1:), Scalar(-1:,-1:,-1:,1:)
+    real(knd), intent(inout) :: Temperature(-2:,-2:,-2:), Moisture(-2:,-2:,-2:), Scalar(-2:,-2:,-2:,1:)
     logical, intent(in) :: receive
     integer :: err
  
@@ -1832,7 +1832,7 @@ contains
   subroutine receive_and_interpolate(b, U, V, W, Pr, Temperature, Moisture, Scalar)
     type(dom_child_buffer), intent(inout) :: b
     real(knd), intent(inout) :: U(-2:,-2:,-2:), V(-2:,-2:,-2:) ,W(-2:,-2:,-2:), Pr(-1:,-1:,-1:)
-    real(knd), intent(inout) :: Temperature(-1:,-1:,-1:), Moisture(-1:,-1:,-1:), Scalar(-1:,-1:,-1:,1:)
+    real(knd), intent(inout) :: Temperature(-2:,-2:,-2:), Moisture(-2:,-2:,-2:), Scalar(-2:,-2:,-2:,1:)
     real(knd), allocatable :: tmp(:,:,:)
     integer :: n
     integer :: err
@@ -2053,7 +2053,7 @@ contains
   
   subroutine par_send_initial_conditions(U, V, W, Pr, Temperature, Moisture, Scalar)
     real(knd), intent(in) :: U(-2:,-2:,-2:), V(-2:,-2:,-2:) ,W(-2:,-2:,-2:), Pr(-1:,-1:,-1:)
-    real(knd), intent(in) :: Temperature(-1:,-1:,-1:), Moisture(-1:,-1:,-1:), Scalar(-1:,-1:,-1:,:)
+    real(knd), intent(in) :: Temperature(-2:,-2:,-2:), Moisture(-2:,-2:,-2:), Scalar(-2:,-2:,-2:,:)
 
     real(knd), allocatable :: tmp(:,:,:)
     integer :: di, i, j, k, n
@@ -2122,8 +2122,8 @@ contains
   subroutine par_domain_two_way_nesting_feedback(U, V, W, Temperature, Moisture, Scalar, &
                                                 time, dt)
     real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: U, V ,W 
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: Temperature, Moisture
-    real(knd), dimension(-1:,-1:,-1:,1:), contiguous, intent(inout) :: Scalar
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: Temperature, Moisture
+    real(knd), dimension(-2:,-2:,-2:,1:), contiguous, intent(inout) :: Scalar
     real(tim), intent(in) :: time, dt
     real(knd), allocatable :: tmp(:,:,:), tmp4(:,:,:,:)
     integer :: di, i, j, k, n, scal

@@ -21,7 +21,7 @@ module Large_scale_processes
 contains
 
   subroutine apply_temperature_advection_profile(Temperature)
-    real(knd), contiguous, intent(inout) :: Temperature(-1:,-1:,-1:)
+    real(knd), contiguous, intent(inout) :: Temperature(-2:,-2:,-2:)
     integer :: i ,j, k
 
     !$omp parallel do collapse(3)
@@ -35,7 +35,7 @@ contains
   end subroutine
 
   subroutine apply_moisture_advection_profile(Moisture)
-    real(knd), contiguous, intent(inout) :: Moisture(-1:,-1:,-1:)
+    real(knd), contiguous, intent(inout) :: Moisture(-2:,-2:,-2:)
     integer :: i ,j, k
 
     !$omp parallel do collapse(3)
@@ -53,7 +53,7 @@ contains
   subroutine apply_subsidence_profile(Array_adv, Array)
     !the subsidence profile contains velocities <w>
     !positive means upwards
-    real(knd), dimension(-1:,-1:,-1:), contiguous, intent(inout) :: Array_adv, Array
+    real(knd), dimension(-2:,-2:,-2:), contiguous, intent(inout) :: Array_adv, Array
     integer :: i, j, k
     
     !$omp parallel do private(i,j,k)
@@ -71,7 +71,7 @@ contains
  
   
   subroutine temperature_large_scale_terms(Temperature)
-    real(knd), contiguous, intent(inout) :: Temperature(-1:,-1:,-1:)
+    real(knd), contiguous, intent(inout) :: Temperature(-2:,-2:,-2:)
 
     if (enable_temperature_advection_profile) then
       call apply_temperature_advection_profile(Temperature)
@@ -82,7 +82,7 @@ contains
 
 
   subroutine moisture_large_scale_terms(Moisture)
-    real(knd), contiguous, intent(inout) :: Moisture(-1:,-1:,-1:)
+    real(knd), contiguous, intent(inout) :: Moisture(-2:,-2:,-2:)
 
     if (enable_moisture_advection_profile) then
       call apply_moisture_advection_profile(Moisture)

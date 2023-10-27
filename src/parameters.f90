@@ -128,8 +128,11 @@ module Parameters
   real(knd) :: molecular_viscosity = 1._knd / 70000
   real(knd) :: molecular_diffusivity = 1._knd / 70000 / 0.7 !default Prandtl number 0.7
 
-
+  ! preset as a forcing
   real(knd) :: pr_gradient_x = 0, pr_gradient_y = 0, pr_gradient_z = 0
+  ! calculated every time step
+  real(knd) :: pr_gradient_x_dynamic = 0, pr_gradient_y_dynamic = 0, pr_gradient_z_dynamic = 0
+  ! preset as profiles
   real(knd), allocatable :: pr_gradient_profile_x(:), pr_gradient_profile_y(:)
 
   logical :: enable_pr_gradient_x_uniform = .false.
@@ -247,6 +250,8 @@ module Parameters
 
   !set by user
   logical :: enable_fixed_flow_rate = .false.
+  logical :: set_U_bulk = .false.
+  real(knd) :: U_bulk_vec(3) = 0
   !set from boundary conditions automatically
   logical :: flow_rate_x_fixed = .false., flow_rate_y_fixed = .false., flow_rate_z_fixed = .false.
   real(knd) :: flow_rate_x, flow_rate_y, flow_rate_z

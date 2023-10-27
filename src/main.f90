@@ -240,14 +240,14 @@ contains
 
 
     if (enable_buoyancy) then
-      allocate(Temperature(-1:Prnx+2,-1:Prny+2,-1:Prnz+2))
+      allocate(Temperature(-2:Prnx+3,-2:Prny+3,-2:Prnz+3))
       Temperature = 0
     else
       allocate(Temperature(0,0,0))
     endif
 
     if (enable_moisture) then
-      allocate(Moisture(-1:Prnx+2,-1:Prny+2,-1:Prnz+2))
+      allocate(Moisture(-2:Prnx+3,-2:Prny+3,-2:Prnz+3))
       Moisture = 0      
     else
       allocate(Moisture(0,0,0))
@@ -262,7 +262,7 @@ contains
 
 
     if (num_of_scalars>0) then
-      allocate(Scalar(-1:Prnx+2,-1:Prny+2,-1:Prnz+2,num_of_scalars))
+      allocate(Scalar(-2:Prnx+3,-2:Prny+3,-2:Prnz+3,num_of_scalars))
       Scalar = 0
     else
       allocate(Scalar(0,0,0,0))

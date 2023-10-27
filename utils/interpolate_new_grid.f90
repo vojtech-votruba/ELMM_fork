@@ -702,11 +702,11 @@ program interpolate_new_grid
         Win(:,:) = old_sc(1,:,:)
         call BoundU(3,old_sc,Win)
       else if (staggered==0.and.status==SCALAR.and.starts_with_ins(title,"scalars temperature")) then
-        call BoundTemperature(old_sc(-1:,-1:,-1:))
+        call BoundTemperature(old_sc)
       else if (staggered==0.and.status==SCALAR.and.starts_with_ins(title,"scalars moisture")) then
-        call BoundMoisture(old_sc(-1:,-1:,-1:))
+        call BoundMoisture(old_sc)
       else if (staggered==0.and.status==SCALAR.and.starts_with_ins(title,"scalars scalar")) then
-        call BoundScalar(old_sc(-1:,-1:,-1:))
+        call BoundScalar(old_sc)
       else if (staggered==0.and.status==SCALAR) then
         call bound_simple(old_sc)
       else if (staggered==0.and.status==VECTOR) then

@@ -713,7 +713,7 @@ module VolumeSources
     end subroutine ResistanceForce
 
     subroutine TemperatureVolumeSources(Temperature)
-      real(knd),dimension(-1:,-1:,-1:),intent(inout) :: Temperature
+      real(knd),dimension(-2:,-2:,-2:),intent(inout) :: Temperature
       integer :: i
 !       call FluxKernel(Temperature,TemperatureFlVolumes)
       associate (X=>Temperature, src=> TemperatureFlVolumes)
@@ -726,7 +726,7 @@ module VolumeSources
     end subroutine TemperatureVolumeSources
 
     subroutine MoistureVolumeSources(Moisture)
-      real(knd),dimension(-1:,-1:,-1:),intent(inout) :: Moisture
+      real(knd),dimension(-2:,-2:,-2:),intent(inout) :: Moisture
       integer :: i
 !       call FluxKernel(Moisture,MoistureFlVolumes)
       associate (X=>Moisture, src=> MoistureFlVolumes)
@@ -739,7 +739,7 @@ module VolumeSources
     end subroutine MoistureVolumeSources
 
     subroutine ScalarVolumeSources(Scalar, sc, first_stage)
-      real(knd),dimension(-1:,-1:,-1:),intent(inout) :: Scalar
+      real(knd),dimension(-2:,-2:,-2:),intent(inout) :: Scalar
       integer, intent(in) :: sc
       logical, intent(in) :: first_stage
 
@@ -758,7 +758,7 @@ module VolumeSources
     end subroutine ScalarVolumeSources
 
     subroutine FluxKernel(X, src)
-      real(knd),intent(inout) :: X(-1:,-1:,-1:)
+      real(knd),intent(inout) :: X(-2:,-2:,-2:)
       type(ScalarFlVolume),intent(in) :: src(:)
       integer :: i
       !Assume src is allocated. It must hold if we called MovePointsToArray properly.
@@ -772,7 +772,7 @@ module VolumeSources
     
     
     subroutine VariableFluxKernel(X, src, sc)
-      real(knd),intent(inout) :: X(-1:,-1:,-1:)
+      real(knd),intent(inout) :: X(-2:,-2:,-2:)
       type(ScalarFlVolume),intent(inout) :: src(:)
       integer, intent(in) :: sc
       integer :: i

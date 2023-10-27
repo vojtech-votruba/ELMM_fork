@@ -147,7 +147,7 @@ contains
           call SpongeOut(U2, V2, W2, temperature)
       end if
 
-      if (enable_fixed_flow_rate) call CorrectFlowRate(U2, V2, W2)
+      if (enable_fixed_flow_rate) call CorrectFlowRate(U2, V2, W2, 2*RK_alpha(RK_stage)*time_stepping%dt)
 
       call BoundUVW(U2, V2, W2)
 
@@ -197,7 +197,8 @@ contains
         if (RK_stage==RK_stages) then
 #ifdef PAR
           delta = par_co_sum(delta)
-#endif
+#endif          
+          delta = delta / time_stepping%dt
           if (master) write(*,*) "delta",delta
         end if
       end if
@@ -423,7 +424,7 @@ contains
     use vtkarray
 
     real(knd), dimension(-2:,-2:,-2:), contiguous, intent(in) :: U, V, W
-    real(knd), intent(out) :: Q(0:,0:,0:)
+    real(knd), contiguous, intent(out) :: Q(0:,0:,0:)
     integer :: i, xi, yj, zk
     !deconvolution of the flux velocity
     real(knd), parameter :: C0 = 26._knd / 24, C1 = -1._knd / 24
