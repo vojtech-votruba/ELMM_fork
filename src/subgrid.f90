@@ -1006,7 +1006,7 @@ module Subgrid
 
       width = filter_ratio * (dxmin*dymin*dzmin)**(1._knd/3._knd)
 
-      !$omp parallel do private(i,j,k,ii,jj,kk,ll,Omega,S,S_sqrt,Omega_sqrt,IVs,SdSd,OP1,OP2)
+      !$omp parallel do private(i,j,k,ii,jj,kk,ll,Omega,S,S_sqr,Omega_sqr,IVs,SdSd,OP1,OP2)
       do k = 1, Prnz
         do j = 1, Prny
           do i = 1, Prnx
