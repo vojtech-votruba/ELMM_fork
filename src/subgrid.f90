@@ -1037,10 +1037,10 @@ module Subgrid
 
             OP1 = (SdSd)**(3._knd/2._knd)
             OP2 = (S_sqr)**(5._knd/2._knd) + (SdSd)**(5._knd/4._knd)
-            if (OP1 == 0._knd .AND. OP2 == 0._knd) then
+            if (OP2 == 0) then
               Viscosity(i,j,k) = 0._knd
             else
-              Viscosity(i,j,k) = (C_WALE * width)**(2._knd) * OP1/OP2
+              Viscosity(i,j,k) = (C_WALE * width)**(2) * OP1/OP2
             endif
             Viscosity(i,j,k) = Viscosity(i,j,k) + molecular_viscosity
           end do
