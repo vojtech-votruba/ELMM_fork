@@ -1006,6 +1006,7 @@ module Subgrid
 
       width = filter_ratio * (dxmin*dymin*dzmin)**(1._knd/3._knd)
 
+      !$omp parallel do private(i,j,k,ii,jj,kk,ll,Omega,S,S_sqr,Omega_sqr,IVs,SdSd,OP1,OP2)
       do k = 1, Prnz
         do j = 1, Prny
           do i = 1, Prnx
@@ -1037,15 +1038,16 @@ module Subgrid
 
             OP1 = (SdSd)**(3._knd/2._knd)
             OP2 = (S_sqr)**(5._knd/2._knd) + (SdSd)**(5._knd/4._knd)
-            if (OP1 == 0._knd .AND. OP2 == 0._knd) then
+            if (OP2 == 0) then
               Viscosity(i,j,k) = 0._knd
             else
-              Viscosity(i,j,k) = (C_WALE * width)**(2._knd) * OP1/OP2
+              Viscosity(i,j,k) = (C_WALE * width)**(2) * OP1/OP2
             endif
             Viscosity(i,j,k) = Viscosity(i,j,k) + molecular_viscosity
           end do
         end do
       end do
+      !$omp end parallel do
 
       contains
         pure subroutine OmegaIJ(Omega, i, j, k)
