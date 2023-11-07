@@ -1,5 +1,16 @@
 # ELMM - Extended Large Eddy Microscale Model #
 
+### Poděkování SFG a vedoucímu práce Vladimíru Fukovi, Ph.D. ###
+Děkuji SFG za možnost vyzkoušení si vědecké práce v rámci studia na MFF UK, děkuji také obecně za finanční i jinou podporu řešení projektu.
+Dále děkuji svému vedoucímu projektu panu Vladimíru Fukovi, Ph.D., který mi trpělivě vysvětloval všechno, čemu jsem nerozuměl.
+
+Zbytek tohoto README souboru byl převzat z repozitáře ELMM pana doktora Fuky.
+
+I thank the SFG (Student Faculty Grant) for an opportunity to try out real scientific work while studying at CUNI MFF, I also thank SFG for the support (financial and other) it gave me while I was working on this project.
+A huge thank you belongs to my supervisor Vladimír Fuka, Ph.D., who explained to me all the things I didn't understand with patience. 
+
+The rest of this README file was copied from ELMM repository of Doctor Fuka.
+
 ### About ELMM: ###
 
 ELMM is an LES model for atmospheric flows. Especially used for atmospheric dispersion problems in complex geometry.
