@@ -7,7 +7,7 @@ Dále děkuji svému vedoucímu projektu panu Vladimíru Fukovi, Ph.D., který m
 Zbytek tohoto README souboru byl převzat z repozitáře ELMM pana doktora Fuky.
 
 I thank the SFG (Student Faculty Grant) for an opportunity to try out real scientific work while studying at CUNI MFF, I also thank the SFG for all the support (financial and other) it gave me while I was working on this project.
-In addition a huge thank you belongs to my supervisor Vladimír Fuka, Ph.D., who explained to me all the things I didn't understand with patience. 
+In addition, a huge thank you belongs to my supervisor Vladimír Fuka, Ph.D., who explained to me all the things I didn't understand with patience. 
 
 The rest of this README file was copied from ELMM repository of Doctor Fuka.
 
